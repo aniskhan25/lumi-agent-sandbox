@@ -75,10 +75,10 @@ class SandboxTests(unittest.TestCase):
             self.assertEqual(policy["allowed_partitions"], ["small", "standard", "dev-g", "small-g", "standard-g"])
 
             enter = (sandbox.path / "enter.sh").read_text(encoding="utf-8")
-            self.assertIn("--no-home", enter)
+            self.assertIn('--home "$SANDBOX/state/home:/home/agent"', enter)
             self.assertIn("--cleanenv", enter)
             self.assertIn("singularity run", enter)
-            self.assertIn("SINGULARITYENV_HOME=/home/agent", enter)
+            self.assertNotIn("SINGULARITYENV_HOME", enter)
             self.assertIn("SINGULARITYENV_PREPEND_PATH=/safe-bin", enter)
             self.assertNotIn(" opencode", enter)
             self.assertIn('--bind "$SANDBOX/input:/input:ro"', enter)

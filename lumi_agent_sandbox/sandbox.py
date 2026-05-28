@@ -214,19 +214,17 @@ if [ ! -r "$AGENT_IMAGE" ]; then
 fi
 
 exec env \\
-  SINGULARITYENV_HOME=/home/agent \\
   SINGULARITYENV_PREPEND_PATH=/safe-bin \\
   singularity run \\
   --cleanenv \\
   --containall \\
-  --no-home \\
+  --home "$SANDBOX/state/home:/home/agent" \\
   --pwd /workspace \\
   --bind "$SANDBOX/work:/workspace" \\
   --bind "$SANDBOX/input:/input:ro" \\
   --bind "$SANDBOX/output:/output" \\
   --bind "$SANDBOX/jobs:/jobs" \\
   --bind "$SANDBOX/logs:/logs" \\
-  --bind "$SANDBOX/state/home:/home/agent" \\
   --bind "$SANDBOX/wrappers:/safe-bin:ro" \\
   "$AGENT_IMAGE"
 """
