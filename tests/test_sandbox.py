@@ -38,7 +38,7 @@ class SandboxTests(unittest.TestCase):
             policy = read_policy(sandbox.path / "policy.yaml")
             self.assertEqual(policy["account"], "project_123")
             self.assertEqual(policy["agent_image"], "/agent.sif")
-            self.assertEqual(policy["allowed_partitions"], ["debug", "dev-g"])
+            self.assertEqual(policy["allowed_partitions"], ["small", "standard", "dev-g", "small-g", "standard-g"])
 
             enter = (sandbox.path / "enter.sh").read_text(encoding="utf-8")
             self.assertIn("--no-home", enter)
@@ -141,7 +141,7 @@ python /scratch/project_123/real-repo/train.py
         with tempfile.TemporaryDirectory() as tmp:
             sandbox = create_sandbox("demo", Path(tmp), "project_123", "/agent.sif")
             script = sandbox.path / "jobs" / "ok.sh"
-            script.write_text("#!/bin/sh\nhostname\n", encoding="utf-8")
+            script.write_text("#!/bin/sh\n#SBATCH --partition=dev-g\nhostname\n", encoding="utf-8")
 
             stdout = io.StringIO()
             with contextlib.redirect_stdout(stdout):
@@ -149,7 +149,6 @@ python /scratch/project_123/real-repo/train.py
 
             self.assertEqual(code, 0)
             self.assertIn(f"{sandbox.path}/jobs/ok.sh", stdout.getvalue())
-            self.assertIn("--partition=debug", stdout.getvalue())
             self.assertNotIn("--gpus-per-node", stdout.getvalue())
 
 

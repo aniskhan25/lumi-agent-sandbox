@@ -166,7 +166,7 @@ def _write_policy(sandbox: Sandbox) -> None:
 agent_image: {sandbox.agent_image}
 
 defaults:
-  partition: debug
+  partition: dev-g
   time: "00:15:00"
   nodes: 1
   gpus_per_node: 0
@@ -178,8 +178,11 @@ limits:
   max_array_size: 1
 
 allowed_partitions:
-  - debug
+  - small
+  - standard
   - dev-g
+  - small-g
+  - standard-g
 
 allowed_paths:
   - {sandbox.path}

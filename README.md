@@ -42,7 +42,7 @@ Each sandbox has a `policy.yaml`. The generated default allows small, short jobs
 - max time: `00:30:00`
 - max nodes: `1`
 - max GPUs per node: `1`
-- allowed partitions: `debug`, `dev-g`
+- allowed partitions: `small`, `standard`, `dev-g`, `small-g`, `standard-g`
 
 `submit` accepts only scripts inside the sandbox `jobs/` directory. It rejects obvious references to home directories, broad project/scratch paths outside the sandbox, excessive resources, and log paths outside `logs/`.
 
