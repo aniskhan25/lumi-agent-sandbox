@@ -59,6 +59,8 @@ lumi-agent-sandbox submit my-task jobs/test.sh
 python3 -m pip install -e .
 ```
 
+The repository includes a small `setup.py` so editable installs work with older `pip` versions commonly found on HPC systems.
+
 Run tests with the standard library:
 
 ```sh
