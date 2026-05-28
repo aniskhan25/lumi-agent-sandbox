@@ -1,87 +1,144 @@
 # lumi-agent-sandbox
 
-`lumi-agent-sandbox` is a small host-side harness for running an AI coding agent on LUMI inside a disposable task workspace.
+Small host-side harness for running OpenCode on LUMI inside a disposable task workspace.
 
-It does not try to replace the LAIF agent container. It wraps it with stricter defaults:
+It creates one sandbox directory per task, launches the LAIF OpenCode SIF with strict mounts, and submits Slurm jobs only through a host-side policy check.
 
-- no `$HOME` mount by default
-- one workspace per task
-- read-only `/input`
-- writable `/workspace`, `/output`, `/jobs`, and `/logs`
-- host-side Slurm validation before `sbatch`
-- manual diff/archive/destroy flow
+Default project settings in this repo:
 
-## Basic Use
+```text
+account: project_462000131
+sandbox root: /scratch/project_462000131/$USER/agent-sandboxes
+OpenCode SIF: /appl/local/laifs/agents/sif/opencode.sif
+```
+
+## Quickstart On LUMI
+
+Clone and install:
+
+```sh
+cd /scratch/project_462000131/$USER
+git clone <your-lumi-agent-sandbox-repo-url> lumi-agent-sandbox
+cd lumi-agent-sandbox
+
+module load cray-python
+python3 -m pip install --user -e .
+```
+
+Create a disposable test sandbox:
+
+```sh
+lumi-agent-sandbox create smoke-test
+cd /scratch/project_462000131/$USER/agent-sandboxes/smoke-test
+```
+
+Check the container mounts with a shell:
+
+```sh
+lumi-agent-sandbox shell smoke-test
+```
+
+Inside that shell, run:
+
+```sh
+pwd
+echo "$HOME"
+ls -la /workspace /input /output /jobs /logs
+sbatch --version
+srun --version
+salloc --version
+exit
+```
+
+Expected:
+
+- `pwd` is `/workspace`
+- `HOME` is `/home/agent`
+- `/input` is read-only
+- `sbatch`, `srun`, and `salloc` print the sandbox wrapper message
+
+Create a tiny Slurm job:
+
+```sh
+cat > jobs/hostname.sh <<'EOF'
+#!/bin/sh
+#SBATCH --partition=dev-g
+#SBATCH --time=00:02:00
+#SBATCH --nodes=1
+
+hostname
+pwd
+ls -la
+EOF
+```
+
+Submit it through the sandbox harness:
+
+```sh
+lumi-agent-sandbox submit smoke-test jobs/hostname.sh
+lumi-agent-sandbox status smoke-test
+```
+
+After the job finishes:
+
+```sh
+ls -la logs
+cat logs/*.out
+cat logs/*.err
+```
+
+Start OpenCode:
+
+```sh
+lumi-agent-sandbox enter smoke-test
+```
+
+`enter` opens the OpenCode UI. Type agent prompts there. Use `shell` only when you want a normal container shell for mount checks.
+
+## Daily Use
+
+For a real task:
 
 ```sh
 lumi-agent-sandbox create my-task
-lumi-agent-sandbox shell my-task
+cd /scratch/project_462000131/$USER/agent-sandboxes/my-task/work
+# copy or clone only the files the agent should edit
 lumi-agent-sandbox enter my-task
-lumi-agent-sandbox submit my-task jobs/test.sh
+```
+
+Review changes before copying anything back:
+
+```sh
 lumi-agent-sandbox diff my-task
 lumi-agent-sandbox archive my-task
+```
+
+Delete a sandbox only when you are done with it:
+
+```sh
 lumi-agent-sandbox destroy my-task --yes
 ```
 
-By default, sandboxes are created under:
+## Policy
 
-```text
-/scratch/project_462000131/$USER/agent-sandboxes
-```
-
-Override that with:
-
-```sh
-lumi-agent-sandbox --account project_other create my-task
-lumi-agent-sandbox --root /scratch/project_other/$USER/agent-sandboxes create my-task
-```
-
-The default LAIF/OpenCode image is:
-
-```text
-/appl/local/laifs/agents/sif/opencode.sif
-```
-
-Override it if needed:
-
-```sh
-export LUMI_AGENT_IMAGE=/path/to/other-agent.sif
-lumi-agent-sandbox --agent-image /path/to/other-agent.sif create my-task
-```
-
-## Slurm Policy
-
-Each sandbox has a `policy.yaml`. The generated default allows small, short jobs only:
+Each sandbox has a `policy.yaml`. The generated default allows short, small jobs:
 
 - max time: `00:30:00`
 - max nodes: `1`
 - max GPUs per node: `1`
 - allowed partitions: `small`, `standard`, `dev-g`, `small-g`, `standard-g`
 
-`submit` accepts only scripts inside the sandbox `jobs/` directory. It rejects obvious references to home directories, broad project/scratch paths outside the sandbox, excessive resources, and log paths outside `logs/`.
+`submit` accepts only scripts inside the sandbox `jobs/` directory. It forces Slurm stdout/stderr into the sandbox `logs/` directory and rejects obvious references to home directories or broad project/scratch paths outside the sandbox.
 
-The generated container wrappers shadow `sbatch`, `srun`, and `salloc` inside the agent container. Submit jobs from the host:
-
-```sh
-lumi-agent-sandbox submit my-task jobs/test.sh
-```
-
-Use `shell` for smoke tests and mount checks. Use `enter` for the OpenCode UI:
+Override defaults when needed:
 
 ```sh
-lumi-agent-sandbox shell my-task
-lumi-agent-sandbox enter my-task
+lumi-agent-sandbox --account project_other create my-task
+lumi-agent-sandbox --root /scratch/project_other/$USER/agent-sandboxes create my-task
+export LUMI_AGENT_IMAGE=/path/to/other-agent.sif
 ```
 
-## Install For Development
-
-```sh
-python3 -m pip install -e .
-```
-
-The repository includes a small `setup.py` so editable installs work with older `pip` versions commonly found on HPC systems.
-
-Run tests with the standard library:
+Run local tests:
 
 ```sh
 python3 -m unittest discover -s tests
