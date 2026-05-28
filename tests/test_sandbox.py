@@ -18,7 +18,7 @@ from lumi_agent_sandbox.sandbox import (
     sandbox_root,
     task_id,
 )
-from lumi_agent_sandbox.slurm import PolicyError, parse_sbatch_directives, submit_job
+from lumi_agent_sandbox.slurm import PolicyError, parse_sbatch_directives, parse_slurm_time, submit_job
 
 
 class SandboxTests(unittest.TestCase):
@@ -142,6 +142,46 @@ hostname
 
             with self.assertRaisesRegex(PolicyError, "requested time"):
                 submit_job(sandbox, script, dry_run=True)
+
+    def test_submit_rejects_day_prefixed_large_job(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            sandbox = create_sandbox("demo", Path(tmp), "project_123", "/agent.sif")
+            script = sandbox.path / "jobs" / "large.sh"
+            script.write_text(
+                """#!/bin/sh
+#SBATCH --partition=dev-g
+#SBATCH --time=0-01:00
+hostname
+""",
+                encoding="utf-8",
+            )
+
+            with self.assertRaisesRegex(PolicyError, "requested time"):
+                submit_job(sandbox, script, dry_run=True)
+
+    def test_parse_slurm_day_prefixed_times(self) -> None:
+        self.assertEqual(parse_slurm_time("0-01:00"), 3600)
+        self.assertEqual(parse_slurm_time("0-00:45"), 2700)
+        self.assertEqual(parse_slurm_time("1-00"), 86400)
+
+    def test_submit_ignores_script_log_directives_because_cli_forces_logs(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            sandbox = create_sandbox("demo", Path(tmp), "project_123", "/agent.sif")
+            script = sandbox.path / "jobs" / "logs.sh"
+            script.write_text(
+                """#!/bin/sh
+#SBATCH --partition=dev-g
+#SBATCH --output=relative.out
+#SBATCH --error=relative.err
+hostname
+""",
+                encoding="utf-8",
+            )
+
+            command = submit_job(sandbox, script, dry_run=True)
+
+            self.assertIn(f"--output={sandbox.path}/logs/%x-%j.out", command)
+            self.assertIn(f"--error={sandbox.path}/logs/%x-%j.err", command)
 
     def test_submit_rejects_outside_paths(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

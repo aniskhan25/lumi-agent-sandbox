@@ -99,8 +99,6 @@ def validate_job(sandbox: Sandbox, policy: dict[str, object], options: dict[str,
     if array_size > int(limits.get("max_array_size", 1)):
         raise PolicyError(f"array size {array_size} exceeds max_array_size {limits.get('max_array_size')}")
 
-    _validate_log_path(sandbox, options.get("output"), "output")
-    _validate_log_path(sandbox, options.get("error"), "error")
     _reject_obvious_outside_paths(sandbox, script_text)
 
 
@@ -115,20 +113,28 @@ def effective_submit_options(policy: dict[str, object], options: dict[str, str])
 
 
 def parse_slurm_time(value: str) -> int:
+    original = value
+    has_days = "-" in value
     days = 0
-    if "-" in value:
+    if has_days:
         day_text, value = value.split("-", 1)
         days = int(day_text)
 
     parts = [int(part) for part in value.split(":")]
-    if len(parts) == 1:
+    if has_days and len(parts) == 1:
+        hours, minutes, seconds = parts[0], 0, 0
+    elif has_days and len(parts) == 2:
+        hours, minutes, seconds = parts[0], parts[1], 0
+    elif has_days and len(parts) == 3:
+        hours, minutes, seconds = parts
+    elif len(parts) == 1:
         hours, minutes, seconds = 0, parts[0], 0
     elif len(parts) == 2:
         hours, minutes, seconds = 0, parts[0], parts[1]
     elif len(parts) == 3:
         hours, minutes, seconds = parts
     else:
-        raise PolicyError(f"invalid Slurm time: {value!r}")
+        raise PolicyError(f"invalid Slurm time: {original!r}")
     return days * 86400 + hours * 3600 + minutes * 60 + seconds
 
 
@@ -177,19 +183,6 @@ def _array_size(value: str | None) -> int:
         else:
             total += 1
     return total
-
-
-def _validate_log_path(sandbox: Sandbox, value: str | None, label: str) -> None:
-    if not value:
-        return
-    path = Path(value.replace("%j", "0").replace("%x", "job"))
-    if not path.is_absolute():
-        path = sandbox.path / "jobs" / path
-    logs = (sandbox.path / "logs").resolve()
-    try:
-        path.resolve().relative_to(logs)
-    except ValueError as exc:
-        raise PolicyError(f"SBATCH {label} path must be under {logs}") from exc
 
 
 def _reject_obvious_outside_paths(sandbox: Sandbox, script_text: str) -> None:
