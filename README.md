@@ -35,6 +35,19 @@ lumi-agent-sandbox --account project_other create my-task
 lumi-agent-sandbox --root /scratch/project_other/$USER/agent-sandboxes create my-task
 ```
 
+`enter` needs the LAIF/OpenCode Singularity image path. Set it before creating or entering a sandbox:
+
+```sh
+export LUMI_AGENT_IMAGE=/path/to/agent.sif
+lumi-agent-sandbox create my-task
+```
+
+You can also pass it directly:
+
+```sh
+lumi-agent-sandbox --agent-image /path/to/agent.sif create my-task
+```
+
 ## Slurm Policy
 
 Each sandbox has a `policy.yaml`. The generated default allows small, short jobs only:

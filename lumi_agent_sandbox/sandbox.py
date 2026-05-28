@@ -10,7 +10,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 
-DEFAULT_AGENT_IMAGE = "/appl/local/laifs/containers/laifs-agent-env.sif"
+DEFAULT_AGENT_IMAGE = ""
 DEFAULT_ACCOUNT = "project_462000131"
 TASK_RE = re.compile(r"[^a-zA-Z0-9._-]+")
 
@@ -36,6 +36,10 @@ def task_id(name: str) -> str:
 
 def account_from_env(value: str | None) -> str:
     return value or os.environ.get("LUMI_ACCOUNT") or os.environ.get("PROJECT") or DEFAULT_ACCOUNT
+
+
+def agent_image_from_env(value: str | None) -> str:
+    return value or os.environ.get("LUMI_AGENT_IMAGE") or os.environ.get("LUMI_AGENT_SIF") or DEFAULT_AGENT_IMAGE
 
 
 def sandbox_root(value: str | None, account: str) -> Path:
@@ -75,10 +79,11 @@ def load_sandbox(name: str, root: Path, account: str, agent_image: str | None = 
     if not policy_path.exists():
         raise FileNotFoundError(f"sandbox not found: {root / task}")
     policy = read_policy(policy_path)
-    return Sandbox(task, root.resolve(), str(policy.get("account") or account), str(policy.get("agent_image") or agent_image or DEFAULT_AGENT_IMAGE))
+    return Sandbox(task, root.resolve(), str(policy.get("account") or account), agent_image or str(policy.get("agent_image") or ""))
 
 
 def enter_sandbox(sandbox: Sandbox) -> None:
+    _write_enter_script(sandbox)
     script = sandbox.path / "enter.sh"
     if not script.exists():
         raise FileNotFoundError(f"missing enter script: {script}")
@@ -163,7 +168,7 @@ def read_policy(path: Path) -> dict[str, object]:
 
 def _write_policy(sandbox: Sandbox) -> None:
     policy = f"""account: {sandbox.account}
-agent_image: {sandbox.agent_image}
+agent_image: {_yaml_quote(sandbox.agent_image)}
 
 defaults:
   partition: dev-g
@@ -196,6 +201,17 @@ set -eu
 
 SANDBOX={_sh_quote(str(sandbox.path))}
 AGENT_IMAGE={_sh_quote(sandbox.agent_image)}
+
+if [ -z "$AGENT_IMAGE" ]; then
+  echo "No agent image configured. Set LUMI_AGENT_IMAGE or recreate with --agent-image /path/to/agent.sif." >&2
+  exit 2
+fi
+
+if [ ! -r "$AGENT_IMAGE" ]; then
+  echo "Agent image not found or not readable: $AGENT_IMAGE" >&2
+  echo "Set LUMI_AGENT_IMAGE or recreate with --agent-image /path/to/agent.sif." >&2
+  exit 2
+fi
 
 exec singularity exec \\
   --cleanenv \\
@@ -247,3 +263,7 @@ def _timestamp() -> str:
 
 def _sh_quote(value: str) -> str:
     return "'" + value.replace("'", "'\"'\"'") + "'"
+
+
+def _yaml_quote(value: str) -> str:
+    return '"' + value.replace("\\", "\\\\").replace('"', '\\"') + '"'

@@ -6,7 +6,7 @@ from pathlib import Path
 
 from .sandbox import (
     DEFAULT_ACCOUNT,
-    DEFAULT_AGENT_IMAGE,
+    agent_image_from_env,
     account_from_env,
     archive_sandbox,
     create_sandbox,
@@ -24,7 +24,7 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="lumi-agent-sandbox")
     parser.add_argument("--root", help="sandbox root, default: $LUMI_AGENT_SANDBOX_ROOT or /scratch/<account>/$USER/agent-sandboxes")
     parser.add_argument("--account", help=f"LUMI project/account, default: $LUMI_ACCOUNT, $PROJECT, or {DEFAULT_ACCOUNT}")
-    parser.add_argument("--agent-image", default=DEFAULT_AGENT_IMAGE, help="agent Singularity image")
+    parser.add_argument("--agent-image", help="agent Singularity image, default: $LUMI_AGENT_IMAGE or $LUMI_AGENT_SIF")
 
     subparsers = parser.add_subparsers(dest="command", required=True)
 
@@ -60,9 +60,10 @@ def main(argv: list[str] | None = None) -> int:
     try:
         account = account_from_env(args.account)
         root = sandbox_root(args.root, account)
+        agent_image = agent_image_from_env(args.agent_image)
 
         if args.command == "create":
-            sandbox = create_sandbox(args.task, root, account, args.agent_image, args.force)
+            sandbox = create_sandbox(args.task, root, account, agent_image, args.force)
             print(sandbox.path)
             return 0
 
@@ -71,7 +72,7 @@ def main(argv: list[str] | None = None) -> int:
                 print(name)
             return 0
 
-        sandbox = load_sandbox(args.task, root, account, args.agent_image)
+        sandbox = load_sandbox(args.task, root, account, agent_image)
 
         if args.command == "enter":
             enter_sandbox(sandbox)

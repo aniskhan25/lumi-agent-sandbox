@@ -7,7 +7,16 @@ from pathlib import Path
 from unittest import mock
 
 from lumi_agent_sandbox.cli import main
-from lumi_agent_sandbox.sandbox import account_from_env, create_sandbox, destroy_sandbox, read_policy, sandbox_root, task_id
+from lumi_agent_sandbox.sandbox import (
+    account_from_env,
+    agent_image_from_env,
+    create_sandbox,
+    destroy_sandbox,
+    load_sandbox,
+    read_policy,
+    sandbox_root,
+    task_id,
+)
 from lumi_agent_sandbox.slurm import PolicyError, parse_sbatch_directives, submit_job
 
 
@@ -26,6 +35,27 @@ class SandboxTests(unittest.TestCase):
                 sandbox_root(None, "project_462000131"),
                 Path("/scratch/project_462000131/anisrahm/agent-sandboxes"),
             )
+
+    def test_agent_image_comes_from_environment(self) -> None:
+        with mock.patch.dict(os.environ, {"LUMI_AGENT_IMAGE": "/env/agent.sif"}, clear=True):
+            self.assertEqual(agent_image_from_env(None), "/env/agent.sif")
+
+    def test_empty_agent_image_writes_clear_enter_error(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            sandbox = create_sandbox("demo", Path(tmp), "project_123", "")
+            policy = read_policy(sandbox.path / "policy.yaml")
+            enter = (sandbox.path / "enter.sh").read_text(encoding="utf-8")
+
+            self.assertEqual(policy["agent_image"], "")
+            self.assertIn("No agent image configured", enter)
+
+    def test_cli_agent_image_overrides_empty_policy(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            create_sandbox("demo", Path(tmp), "project_123", "")
+
+            sandbox = load_sandbox("demo", Path(tmp), "project_123", "/agent.sif")
+
+            self.assertEqual(sandbox.agent_image, "/agent.sif")
 
     def test_create_writes_policy_and_enter_script(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
