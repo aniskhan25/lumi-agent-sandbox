@@ -84,6 +84,8 @@ class SandboxTests(unittest.TestCase):
             self.assertEqual(policy["account"], "project_123")
             self.assertEqual(policy["agent_image"], "/agent.sif")
             self.assertEqual(policy["allowed_partitions"], ["small", "standard", "dev-g", "small-g", "standard-g"])
+            self.assertNotIn("allowed_paths", policy)
+            self.assertFalse((sandbox.path / "manifests").exists())
 
             enter = (sandbox.path / "enter.sh").read_text(encoding="utf-8")
             self.assertIn('--home "$SANDBOX/state/home:/home/agent"', enter)

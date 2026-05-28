@@ -76,7 +76,7 @@ Submit it through the sandbox harness:
 
 ```sh
 lumi-agent-sandbox submit smoke-test jobs/hostname.sh
-lumi-agent-sandbox status smoke-test
+squeue -A project_462000131
 ```
 
 After the job finishes:
@@ -109,8 +109,9 @@ lumi-agent-sandbox enter my-task
 Review changes before copying anything back:
 
 ```sh
-lumi-agent-sandbox diff my-task
-lumi-agent-sandbox archive my-task
+cd /scratch/project_462000131/$USER/agent-sandboxes/my-task/work
+git status
+git diff
 ```
 
 Delete a sandbox only when you are done with it:

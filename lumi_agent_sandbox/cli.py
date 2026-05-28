@@ -10,12 +10,9 @@ from .sandbox import (
     agent_image_from_env,
     agent_image_override_from_env,
     account_from_env,
-    archive_sandbox,
     create_sandbox,
     destroy_sandbox,
-    diff_sandbox,
     enter_sandbox,
-    list_sandboxes,
     load_sandbox,
     sandbox_root,
     shell_sandbox,
@@ -35,8 +32,6 @@ def main(argv: list[str] | None = None) -> int:
     create.add_argument("task")
     create.add_argument("--force", action="store_true")
 
-    subparsers.add_parser("list", help="list task sandboxes")
-
     enter = subparsers.add_parser("enter", help="enter the agent container")
     enter.add_argument("task")
 
@@ -47,15 +42,6 @@ def main(argv: list[str] | None = None) -> int:
     submit.add_argument("task")
     submit.add_argument("script")
     submit.add_argument("--dry-run", action="store_true")
-
-    status = subparsers.add_parser("status", help="show Slurm queue for this account")
-    status.add_argument("task")
-
-    diff = subparsers.add_parser("diff", help="show changes in work/")
-    diff.add_argument("task")
-
-    archive = subparsers.add_parser("archive", help="archive task outputs, jobs, logs, and diff")
-    archive.add_argument("task")
 
     destroy = subparsers.add_parser("destroy", help="delete a task sandbox")
     destroy.add_argument("task")
@@ -71,11 +57,6 @@ def main(argv: list[str] | None = None) -> int:
             agent_image = agent_image_from_env(args.agent_image)
             sandbox = create_sandbox(args.task, root, account, agent_image, args.force)
             print(sandbox.path)
-            return 0
-
-        if args.command == "list":
-            for name in list_sandboxes(root):
-                print(name)
             return 0
 
         sandbox = load_sandbox(args.task, root, account, agent_image_override_from_env(args.agent_image))
@@ -95,17 +76,6 @@ def main(argv: list[str] | None = None) -> int:
             print(submit_job(sandbox, script, args.dry_run))
             return 0
 
-        if args.command == "status":
-            return _status(sandbox.account)
-
-        if args.command == "diff":
-            print(diff_sandbox(sandbox), end="")
-            return 0
-
-        if args.command == "archive":
-            print(archive_sandbox(sandbox))
-            return 0
-
         if args.command == "destroy":
             destroy_sandbox(sandbox, args.yes)
             return 0
@@ -115,10 +85,3 @@ def main(argv: list[str] | None = None) -> int:
         return 1
 
     return 1
-
-
-def _status(account: str) -> int:
-    import subprocess
-
-    result = subprocess.run(["squeue", "-A", account], text=True, check=False)
-    return result.returncode

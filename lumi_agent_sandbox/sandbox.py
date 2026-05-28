@@ -3,10 +3,7 @@ from __future__ import annotations
 import os
 import re
 import shutil
-import subprocess
-import tarfile
 from dataclasses import dataclass
-from datetime import datetime, timezone
 from pathlib import Path
 
 
@@ -62,7 +59,7 @@ def create_sandbox(name: str, root: Path, account: str, agent_image: str, force:
     if sandbox.path.exists() and not force:
         raise FileExistsError(f"sandbox already exists: {sandbox.path}")
 
-    for child in ("work", "input", "output", "jobs", "logs", "state/home", "wrappers", "manifests"):
+    for child in ("work", "input", "output", "jobs", "logs", "state/home", "wrappers"):
         (sandbox.path / child).mkdir(parents=True, exist_ok=True)
 
     _write_policy(sandbox)
@@ -70,12 +67,6 @@ def create_sandbox(name: str, root: Path, account: str, agent_image: str, force:
     _write_shell_script(sandbox)
     _write_command_wrappers(sandbox)
     return sandbox
-
-
-def list_sandboxes(root: Path) -> list[str]:
-    if not root.exists():
-        return []
-    return sorted(path.name for path in root.iterdir() if path.is_dir() and (path / "policy.yaml").exists())
 
 
 def load_sandbox(name: str, root: Path, account: str, agent_image: str | None = None) -> Sandbox:
@@ -101,35 +92,6 @@ def shell_sandbox(sandbox: Sandbox) -> None:
     if not script.exists():
         raise FileNotFoundError(f"missing shell script: {script}")
     os.execv("/bin/sh", ["/bin/sh", str(script)])
-
-
-def diff_sandbox(sandbox: Sandbox) -> str:
-    work = sandbox.path / "work"
-    if (work / ".git").exists():
-        status = subprocess.run(["git", "-C", str(work), "status", "--short"], text=True, capture_output=True, check=False)
-        diff = subprocess.run(["git", "-C", str(work), "diff"], text=True, capture_output=True, check=False)
-        return f"git status --short\n{status.stdout}\ngit diff\n{diff.stdout}"
-
-    files = sorted(path.relative_to(work) for path in work.rglob("*") if path.is_file())
-    if not files:
-        return "work/ is empty\n"
-    return "files in work/\n" + "\n".join(str(path) for path in files) + "\n"
-
-
-def archive_sandbox(sandbox: Sandbox) -> Path:
-    archive_dir = sandbox.root / "_archives"
-    archive_dir.mkdir(parents=True, exist_ok=True)
-    archive_path = archive_dir / f"{sandbox.task}-{_timestamp()}.tar.gz"
-
-    diff_path = sandbox.path / "manifests" / "diff.patch"
-    diff_path.write_text(diff_sandbox(sandbox), encoding="utf-8")
-
-    with tarfile.open(archive_path, "w:gz") as archive:
-        for name in ("policy.yaml", "jobs", "logs", "output", "manifests"):
-            path = sandbox.path / name
-            if path.exists():
-                archive.add(path, arcname=f"{sandbox.task}/{name}")
-    return archive_path
 
 
 def destroy_sandbox(sandbox: Sandbox, yes: bool) -> None:
@@ -201,9 +163,6 @@ allowed_partitions:
   - dev-g
   - small-g
   - standard-g
-
-allowed_paths:
-  - {sandbox.path}
 """
     (sandbox.path / "policy.yaml").write_text(policy, encoding="utf-8")
 
@@ -305,10 +264,6 @@ def _parse_scalar(value: str) -> object:
     if value.lower() == "false":
         return False
     return value
-
-
-def _timestamp() -> str:
-    return datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
 
 
 def _sh_quote(value: str) -> str:
