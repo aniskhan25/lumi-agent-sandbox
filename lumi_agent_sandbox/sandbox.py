@@ -178,6 +178,8 @@ limits:
   max_array_size: 1
 
 allowed_partitions:
+  - small
+  - standard
   - dev-g
   - small-g
   - standard-g

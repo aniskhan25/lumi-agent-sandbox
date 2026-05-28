@@ -38,7 +38,7 @@ class SandboxTests(unittest.TestCase):
             policy = read_policy(sandbox.path / "policy.yaml")
             self.assertEqual(policy["account"], "project_123")
             self.assertEqual(policy["agent_image"], "/agent.sif")
-            self.assertEqual(policy["allowed_partitions"], ["dev-g", "small-g", "standard-g"])
+            self.assertEqual(policy["allowed_partitions"], ["small", "standard", "dev-g", "small-g", "standard-g"])
 
             enter = (sandbox.path / "enter.sh").read_text(encoding="utf-8")
             self.assertIn("--no-home", enter)
