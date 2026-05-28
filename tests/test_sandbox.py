@@ -52,14 +52,17 @@ class SandboxTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "lumi-agent-sandbox.yaml"):
                 resolve_agent_image(None, {})
 
-    def test_load_config_searches_parent_directories(self) -> None:
+    def test_load_config_reads_current_directory(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             (root / "lumi-agent-sandbox.yaml").write_text("account: project_123\nagent_image: /agent.sif\n", encoding="utf-8")
-            child = root / "nested"
-            child.mkdir()
 
-            config = load_config(child)
+            current = Path.cwd()
+            try:
+                os.chdir(root)
+                config = load_config()
+            finally:
+                os.chdir(current)
 
             self.assertEqual(config["account"], "project_123")
             self.assertEqual(config["agent_image"], "/agent.sif")

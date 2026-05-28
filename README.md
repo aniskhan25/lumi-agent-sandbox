@@ -12,6 +12,7 @@ agent_image: /appl/local/laifs/agents/sif/opencode.sif
 ```
 
 The default sandbox root is `/scratch/<account>/$USER/agent-sandboxes`.
+Run commands from the cloned repo directory to use these defaults.
 
 ## Quickstart On LUMI
 
@@ -140,7 +141,7 @@ lumi-agent-sandbox --root /scratch/project_other/$USER/agent-sandboxes create my
 export LUMI_AGENT_IMAGE=/path/to/other-agent.sif
 ```
 
-Resolution order is command-line flag, then environment variable, then `lumi-agent-sandbox.yaml`.
+Resolution order is command-line flag, then environment variable, then `lumi-agent-sandbox.yaml` in the current directory.
 
 Run local tests:
 

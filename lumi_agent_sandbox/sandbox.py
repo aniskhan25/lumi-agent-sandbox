@@ -30,13 +30,9 @@ def task_id(name: str) -> str:
     return cleaned
 
 
-def load_config(start: Path | None = None) -> dict[str, object]:
-    start = (start or Path.cwd()).resolve()
-    for directory in (start, *start.parents):
-        config_path = directory / CONFIG_FILE
-        if config_path.exists():
-            return read_policy(config_path)
-    return {}
+def load_config() -> dict[str, object]:
+    path = Path(CONFIG_FILE)
+    return read_policy(path) if path.exists() else {}
 
 
 def resolve_account(value: str | None, config: dict[str, object] | None = None) -> str:
