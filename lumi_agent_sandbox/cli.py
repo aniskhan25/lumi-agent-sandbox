@@ -6,14 +6,14 @@ from pathlib import Path
 
 from .sandbox import (
     CONFIG_FILE,
-    agent_image_from_env,
-    agent_image_override_from_env,
-    account_from_env,
     create_sandbox,
     destroy_sandbox,
     enter_sandbox,
     load_config,
     load_sandbox,
+    resolve_account,
+    resolve_agent_image,
+    resolve_agent_image_override,
     sandbox_root,
     shell_sandbox,
 )
@@ -51,16 +51,16 @@ def main(argv: list[str] | None = None) -> int:
 
     try:
         config = load_config()
-        account = account_from_env(args.account, config)
+        account = resolve_account(args.account, config)
         root = sandbox_root(args.root, account)
 
         if args.command == "create":
-            agent_image = agent_image_from_env(args.agent_image, config)
+            agent_image = resolve_agent_image(args.agent_image, config)
             sandbox = create_sandbox(args.task, root, account, agent_image, args.force)
             print(sandbox.path)
             return 0
 
-        sandbox = load_sandbox(args.task, root, account, agent_image_override_from_env(args.agent_image))
+        sandbox = load_sandbox(args.task, root, account, resolve_agent_image_override(args.agent_image))
 
         if args.command == "enter":
             enter_sandbox(sandbox)

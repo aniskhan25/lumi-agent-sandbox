@@ -39,21 +39,21 @@ def load_config(start: Path | None = None) -> dict[str, object]:
     return {}
 
 
-def account_from_env(value: str | None, config: dict[str, object] | None = None) -> str:
+def resolve_account(value: str | None, config: dict[str, object] | None = None) -> str:
     account = value or os.environ.get("LUMI_ACCOUNT") or os.environ.get("PROJECT") or (config or {}).get("account")
     if not account:
         raise ValueError(f"provide --account, set LUMI_ACCOUNT, or add account to {CONFIG_FILE}")
     return str(account)
 
 
-def agent_image_from_env(value: str | None, config: dict[str, object] | None = None) -> str:
-    image = agent_image_override_from_env(value) or (config or {}).get("agent_image")
+def resolve_agent_image(value: str | None, config: dict[str, object] | None = None) -> str:
+    image = resolve_agent_image_override(value) or (config or {}).get("agent_image")
     if not image:
         raise ValueError(f"provide --agent-image, set LUMI_AGENT_IMAGE, or add agent_image to {CONFIG_FILE}")
     return str(image)
 
 
-def agent_image_override_from_env(value: str | None) -> str | None:
+def resolve_agent_image_override(value: str | None) -> str | None:
     return value or os.environ.get("LUMI_AGENT_IMAGE") or os.environ.get("LUMI_AGENT_SIF")
 
 

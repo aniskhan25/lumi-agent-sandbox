@@ -8,14 +8,14 @@ from unittest import mock
 
 from lumi_agent_sandbox.cli import main
 from lumi_agent_sandbox.sandbox import (
-    account_from_env,
-    agent_image_from_env,
-    agent_image_override_from_env,
     create_sandbox,
     destroy_sandbox,
     load_config,
     load_sandbox,
     read_policy,
+    resolve_account,
+    resolve_agent_image,
+    resolve_agent_image_override,
     sandbox_root,
     task_id,
 )
@@ -27,7 +27,7 @@ class SandboxTests(unittest.TestCase):
         self.assertEqual(task_id("My Test / Task"), "my-test-task")
 
     def test_account_comes_from_config(self) -> None:
-        self.assertEqual(account_from_env(None, {"account": "project_123"}), "project_123")
+        self.assertEqual(resolve_account(None, {"account": "project_123"}), "project_123")
 
     def test_default_root_uses_user_directory(self) -> None:
         env = {key: value for key, value in os.environ.items() if key != "LUMI_AGENT_SANDBOX_ROOT"}
@@ -40,17 +40,17 @@ class SandboxTests(unittest.TestCase):
 
     def test_agent_image_comes_from_environment(self) -> None:
         with mock.patch.dict(os.environ, {"LUMI_AGENT_IMAGE": "/env/agent.sif"}, clear=True):
-            self.assertEqual(agent_image_from_env(None, {"agent_image": "/config/agent.sif"}), "/env/agent.sif")
-            self.assertEqual(agent_image_override_from_env(None), "/env/agent.sif")
+            self.assertEqual(resolve_agent_image(None, {"agent_image": "/config/agent.sif"}), "/env/agent.sif")
+            self.assertEqual(resolve_agent_image_override(None), "/env/agent.sif")
 
     def test_agent_image_comes_from_config(self) -> None:
         with mock.patch.dict(os.environ, {}, clear=True):
-            self.assertEqual(agent_image_from_env(None, {"agent_image": "/config/agent.sif"}), "/config/agent.sif")
+            self.assertEqual(resolve_agent_image(None, {"agent_image": "/config/agent.sif"}), "/config/agent.sif")
 
     def test_missing_agent_image_reports_config_file(self) -> None:
         with mock.patch.dict(os.environ, {}, clear=True):
             with self.assertRaisesRegex(ValueError, "lumi-agent-sandbox.yaml"):
-                agent_image_from_env(None, {})
+                resolve_agent_image(None, {})
 
     def test_load_config_searches_parent_directories(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
