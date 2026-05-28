@@ -57,7 +57,7 @@ class SandboxTests(unittest.TestCase):
                 submit_job(sandbox, too_long, dry_run=True)
 
             outside = sandbox.path / "jobs" / "outside.sh"
-            outside.write_text("#!/bin/sh\npython /scratch/project_123/real-repo/train.py\n", encoding="utf-8")
+            outside.write_text("#!/bin/sh\npython /pfs/lustrep4/scratch/project_123/real-repo/train.py\n", encoding="utf-8")
             with self.assertRaisesRegex(PolicyError, "outside sandbox"):
                 submit_job(sandbox, outside, dry_run=True)
 
@@ -65,6 +65,21 @@ class SandboxTests(unittest.TestCase):
             bad_location.write_text("#!/bin/sh\nhostname\n", encoding="utf-8")
             with self.assertRaisesRegex(PolicyError, "job script must be inside"):
                 submit_job(sandbox, bad_location, dry_run=True)
+
+    def test_submit_runs_sbatch_from_work_directory(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            sandbox = create_sandbox("demo", Path(tmp), "project_123", "/agent.sif")
+            script = sandbox.path / "jobs" / "ok.sh"
+            script.write_text("#!/bin/sh\n#SBATCH --partition=dev-g\nhostname\n", encoding="utf-8")
+
+            with mock.patch("subprocess.run") as run:
+                run.return_value.returncode = 0
+                run.return_value.stdout = "Submitted batch job 123\n"
+                run.return_value.stderr = ""
+
+                submit_job(sandbox, script)
+
+            self.assertEqual(run.call_args.kwargs["cwd"], sandbox.path / "work")
 
     def test_slurm_day_prefixed_time_parsing(self) -> None:
         self.assertEqual(parse_slurm_time("0-01:00"), 3600)

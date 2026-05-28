@@ -42,7 +42,7 @@ def submit_job(sandbox: Sandbox, script: Path, dry_run: bool = False) -> str:
     if dry_run:
         return shlex.join(command)
 
-    result = subprocess.run(command, text=True, capture_output=True, check=False)
+    result = subprocess.run(command, cwd=sandbox.path / "work", text=True, capture_output=True, check=False)
     if result.returncode != 0:
         raise RuntimeError(result.stderr.strip() or result.stdout.strip() or "sbatch failed")
     return result.stdout.strip()
@@ -153,10 +153,6 @@ def _normal_option(key: str) -> str:
         "--gres": "gres",
         "-a": "array",
         "--array": "array",
-        "-o": "output",
-        "--output": "output",
-        "-e": "error",
-        "--error": "error",
     }
     return aliases.get(key, key.lstrip("-").replace("-", "_"))
 
@@ -190,7 +186,7 @@ def _reject_obvious_outside_paths(sandbox: Sandbox, script_text: str) -> None:
         raise PolicyError("job script must not reference the user's home directory")
 
     allowed = sandbox.path.resolve()
-    for match in re.finditer(r"(?<![\w.-])(/(?:scratch|project|users|home)(?:/[^\s'\";]*)?)", script_text):
+    for match in re.finditer(r"(?<![\w.-])(/(?:scratch|pfs|project|users|home)(?:/[^\s'\";]*)?)", script_text):
         path = Path(match.group(1))
         try:
             path.resolve().relative_to(allowed)
