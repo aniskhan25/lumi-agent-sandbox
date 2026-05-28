@@ -10,6 +10,7 @@ from lumi_agent_sandbox.cli import main
 from lumi_agent_sandbox.sandbox import (
     account_from_env,
     agent_image_from_env,
+    agent_image_override_from_env,
     create_sandbox,
     destroy_sandbox,
     load_sandbox,
@@ -39,6 +40,7 @@ class SandboxTests(unittest.TestCase):
     def test_agent_image_comes_from_environment(self) -> None:
         with mock.patch.dict(os.environ, {"LUMI_AGENT_IMAGE": "/env/agent.sif"}, clear=True):
             self.assertEqual(agent_image_from_env(None), "/env/agent.sif")
+            self.assertEqual(agent_image_override_from_env(None), "/env/agent.sif")
 
     def test_default_agent_image_matches_lumi_opencode_sif(self) -> None:
         with mock.patch.dict(os.environ, {}, clear=True):
@@ -61,6 +63,14 @@ class SandboxTests(unittest.TestCase):
 
             self.assertEqual(sandbox.agent_image, "/agent.sif")
 
+    def test_load_preserves_policy_image_without_explicit_override(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            create_sandbox("demo", Path(tmp), "project_123", "/policy.sif")
+
+            sandbox = load_sandbox("demo", Path(tmp), "project_123", None)
+
+            self.assertEqual(sandbox.agent_image, "/policy.sif")
+
     def test_create_writes_policy_and_enter_script(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             sandbox = create_sandbox("demo", Path(tmp), "project_123", "/agent.sif")
@@ -68,6 +78,7 @@ class SandboxTests(unittest.TestCase):
             self.assertTrue((sandbox.path / "work").is_dir())
             self.assertTrue((sandbox.path / "input").is_dir())
             self.assertTrue((sandbox.path / "enter.sh").exists())
+            self.assertTrue((sandbox.path / "shell.sh").exists())
 
             policy = read_policy(sandbox.path / "policy.yaml")
             self.assertEqual(policy["account"], "project_123")
@@ -84,6 +95,12 @@ class SandboxTests(unittest.TestCase):
             self.assertIn('--bind "$SANDBOX/input:/input:ro"', enter)
             self.assertTrue((sandbox.path / "wrappers" / "sbatch").exists())
             self.assertTrue((sandbox.path / "wrappers" / "srun").exists())
+
+            shell = (sandbox.path / "shell.sh").read_text(encoding="utf-8")
+            self.assertIn("singularity exec", shell)
+            self.assertIn("/bin/sh", shell)
+            self.assertIn("PATH=/safe-bin:/usr/local/bin:/usr/bin:/bin", shell)
+            self.assertIn('--home "$SANDBOX/state/home:/home/agent"', shell)
 
     def test_submit_dry_run_accepts_small_job(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

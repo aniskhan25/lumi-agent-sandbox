@@ -8,6 +8,7 @@ from .sandbox import (
     DEFAULT_ACCOUNT,
     DEFAULT_AGENT_IMAGE,
     agent_image_from_env,
+    agent_image_override_from_env,
     account_from_env,
     archive_sandbox,
     create_sandbox,
@@ -17,6 +18,7 @@ from .sandbox import (
     list_sandboxes,
     load_sandbox,
     sandbox_root,
+    shell_sandbox,
 )
 from .slurm import PolicyError, submit_job
 
@@ -37,6 +39,9 @@ def main(argv: list[str] | None = None) -> int:
 
     enter = subparsers.add_parser("enter", help="enter the agent container")
     enter.add_argument("task")
+
+    shell = subparsers.add_parser("shell", help="open a shell in the sandbox container")
+    shell.add_argument("task")
 
     submit = subparsers.add_parser("submit", help="validate and submit a Slurm script")
     submit.add_argument("task")
@@ -61,9 +66,9 @@ def main(argv: list[str] | None = None) -> int:
     try:
         account = account_from_env(args.account)
         root = sandbox_root(args.root, account)
-        agent_image = agent_image_from_env(args.agent_image)
 
         if args.command == "create":
+            agent_image = agent_image_from_env(args.agent_image)
             sandbox = create_sandbox(args.task, root, account, agent_image, args.force)
             print(sandbox.path)
             return 0
@@ -73,10 +78,14 @@ def main(argv: list[str] | None = None) -> int:
                 print(name)
             return 0
 
-        sandbox = load_sandbox(args.task, root, account, agent_image)
+        sandbox = load_sandbox(args.task, root, account, agent_image_override_from_env(args.agent_image))
 
         if args.command == "enter":
             enter_sandbox(sandbox)
+            return 0
+
+        if args.command == "shell":
+            shell_sandbox(sandbox)
             return 0
 
         if args.command == "submit":

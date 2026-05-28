@@ -15,6 +15,7 @@ It does not try to replace the LAIF agent container. It wraps it with stricter d
 
 ```sh
 lumi-agent-sandbox create my-task
+lumi-agent-sandbox shell my-task
 lumi-agent-sandbox enter my-task
 lumi-agent-sandbox submit my-task jobs/test.sh
 lumi-agent-sandbox diff my-task
@@ -63,6 +64,13 @@ The generated container wrappers shadow `sbatch`, `srun`, and `salloc` inside th
 
 ```sh
 lumi-agent-sandbox submit my-task jobs/test.sh
+```
+
+Use `shell` for smoke tests and mount checks. Use `enter` for the OpenCode UI:
+
+```sh
+lumi-agent-sandbox shell my-task
+lumi-agent-sandbox enter my-task
 ```
 
 ## Install For Development

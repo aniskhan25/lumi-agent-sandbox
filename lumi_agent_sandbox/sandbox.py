@@ -39,7 +39,11 @@ def account_from_env(value: str | None) -> str:
 
 
 def agent_image_from_env(value: str | None) -> str:
-    return value or os.environ.get("LUMI_AGENT_IMAGE") or os.environ.get("LUMI_AGENT_SIF") or DEFAULT_AGENT_IMAGE
+    return agent_image_override_from_env(value) or DEFAULT_AGENT_IMAGE
+
+
+def agent_image_override_from_env(value: str | None) -> str | None:
+    return value or os.environ.get("LUMI_AGENT_IMAGE") or os.environ.get("LUMI_AGENT_SIF")
 
 
 def sandbox_root(value: str | None, account: str) -> Path:
@@ -63,6 +67,7 @@ def create_sandbox(name: str, root: Path, account: str, agent_image: str, force:
 
     _write_policy(sandbox)
     _write_enter_script(sandbox)
+    _write_shell_script(sandbox)
     _write_command_wrappers(sandbox)
     return sandbox
 
@@ -87,6 +92,14 @@ def enter_sandbox(sandbox: Sandbox) -> None:
     script = sandbox.path / "enter.sh"
     if not script.exists():
         raise FileNotFoundError(f"missing enter script: {script}")
+    os.execv("/bin/sh", ["/bin/sh", str(script)])
+
+
+def shell_sandbox(sandbox: Sandbox) -> None:
+    _write_shell_script(sandbox)
+    script = sandbox.path / "shell.sh"
+    if not script.exists():
+        raise FileNotFoundError(f"missing shell script: {script}")
     os.execv("/bin/sh", ["/bin/sh", str(script)])
 
 
@@ -229,6 +242,43 @@ exec env \\
   "$AGENT_IMAGE"
 """
     path = sandbox.path / "enter.sh"
+    path.write_text(script, encoding="utf-8")
+    path.chmod(0o755)
+
+
+def _write_shell_script(sandbox: Sandbox) -> None:
+    script = f"""#!/bin/sh
+set -eu
+
+SANDBOX={_sh_quote(str(sandbox.path))}
+AGENT_IMAGE={_sh_quote(sandbox.agent_image)}
+
+if [ -z "$AGENT_IMAGE" ]; then
+  echo "No agent image configured. Set LUMI_AGENT_IMAGE or recreate with --agent-image /path/to/agent.sif." >&2
+  exit 2
+fi
+
+if [ ! -r "$AGENT_IMAGE" ]; then
+  echo "Agent image not found or not readable: $AGENT_IMAGE" >&2
+  echo "Set LUMI_AGENT_IMAGE or recreate with --agent-image /path/to/agent.sif." >&2
+  exit 2
+fi
+
+exec singularity exec \\
+  --cleanenv \\
+  --containall \\
+  --home "$SANDBOX/state/home:/home/agent" \\
+  --pwd /workspace \\
+  --bind "$SANDBOX/work:/workspace" \\
+  --bind "$SANDBOX/input:/input:ro" \\
+  --bind "$SANDBOX/output:/output" \\
+  --bind "$SANDBOX/jobs:/jobs" \\
+  --bind "$SANDBOX/logs:/logs" \\
+  --bind "$SANDBOX/wrappers:/safe-bin:ro" \\
+  "$AGENT_IMAGE" \\
+  env HOME=/home/agent PATH=/safe-bin:/usr/local/bin:/usr/bin:/bin /bin/sh
+"""
+    path = sandbox.path / "shell.sh"
     path.write_text(script, encoding="utf-8")
     path.chmod(0o755)
 
