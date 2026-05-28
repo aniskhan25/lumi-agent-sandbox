@@ -89,18 +89,12 @@ def load_sandbox(name: str, root: Path, account: str, agent_image: str | None = 
 
 
 def enter_sandbox(sandbox: Sandbox) -> None:
-    _write_enter_script(sandbox)
-    script = sandbox.path / "enter.sh"
-    if not script.exists():
-        raise FileNotFoundError(f"missing enter script: {script}")
+    script = _write_enter_script(sandbox)
     os.execv("/bin/sh", ["/bin/sh", str(script)])
 
 
 def shell_sandbox(sandbox: Sandbox) -> None:
-    _write_shell_script(sandbox)
-    script = sandbox.path / "shell.sh"
-    if not script.exists():
-        raise FileNotFoundError(f"missing shell script: {script}")
+    script = _write_shell_script(sandbox)
     os.execv("/bin/sh", ["/bin/sh", str(script)])
 
 
@@ -177,7 +171,7 @@ allowed_partitions:
     (sandbox.path / "policy.yaml").write_text(policy, encoding="utf-8")
 
 
-def _write_enter_script(sandbox: Sandbox) -> None:
+def _write_enter_script(sandbox: Sandbox) -> Path:
     script = f"""#!/bin/sh
 set -eu
 
@@ -213,9 +207,10 @@ exec env \\
     path = sandbox.path / "enter.sh"
     path.write_text(script, encoding="utf-8")
     path.chmod(0o755)
+    return path
 
 
-def _write_shell_script(sandbox: Sandbox) -> None:
+def _write_shell_script(sandbox: Sandbox) -> Path:
     script = f"""#!/bin/sh
 set -eu
 
@@ -250,6 +245,7 @@ exec singularity exec \\
     path = sandbox.path / "shell.sh"
     path.write_text(script, encoding="utf-8")
     path.chmod(0o755)
+    return path
 
 
 def _write_command_wrappers(sandbox: Sandbox) -> None:
@@ -257,7 +253,7 @@ def _write_command_wrappers(sandbox: Sandbox) -> None:
 echo "Use 'lumi-agent-sandbox submit <task> jobs/<script.sh>' from the host shell." >&2
 exit 2
 """
-    for name in ("sbatch", "srun", "salloc", "safe-sbatch"):
+    for name in ("sbatch", "srun", "salloc"):
         path = sandbox.path / "wrappers" / name
         path.write_text(script, encoding="utf-8")
         path.chmod(0o755)
@@ -269,10 +265,6 @@ def _parse_scalar(value: str) -> object:
         return value[1:-1]
     if value.isdecimal():
         return int(value)
-    if value.lower() == "true":
-        return True
-    if value.lower() == "false":
-        return False
     return value
 
 

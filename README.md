@@ -31,7 +31,7 @@ Create a disposable test sandbox:
 
 ```sh
 lumi-agent-sandbox create smoke-test
-cd /scratch/project_462000131/$USER/agent-sandboxes/smoke-test
+SANDBOX=/scratch/project_462000131/$USER/agent-sandboxes/smoke-test
 ```
 
 Check the container mounts with a shell:
@@ -62,7 +62,7 @@ Expected:
 Create a tiny Slurm job:
 
 ```sh
-cat > jobs/hostname.sh <<'EOF'
+cat > "$SANDBOX/jobs/hostname.sh" <<'EOF'
 #!/bin/sh
 #SBATCH --partition=dev-g
 #SBATCH --time=00:02:00
@@ -84,9 +84,9 @@ squeue -A project_462000131
 After the job finishes:
 
 ```sh
-ls -la logs
-cat logs/*.out
-cat logs/*.err
+ls -la "$SANDBOX/logs"
+cat "$SANDBOX"/logs/*.out
+cat "$SANDBOX"/logs/*.err
 ```
 
 Start OpenCode:
