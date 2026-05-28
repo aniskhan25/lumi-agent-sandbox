@@ -1,11 +1,13 @@
 import contextlib
 import io
+import os
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 from lumi_agent_sandbox.cli import main
-from lumi_agent_sandbox.sandbox import account_from_env, create_sandbox, destroy_sandbox, read_policy, task_id
+from lumi_agent_sandbox.sandbox import account_from_env, create_sandbox, destroy_sandbox, read_policy, sandbox_root, task_id
 from lumi_agent_sandbox.slurm import PolicyError, parse_sbatch_directives, submit_job
 
 
@@ -15,6 +17,15 @@ class SandboxTests(unittest.TestCase):
 
     def test_default_account_matches_lumi_project(self) -> None:
         self.assertEqual(account_from_env(None), "project_462000131")
+
+    def test_default_root_uses_user_directory(self) -> None:
+        env = {key: value for key, value in os.environ.items() if key != "LUMI_AGENT_SANDBOX_ROOT"}
+        env["USER"] = "anisrahm"
+        with mock.patch.dict(os.environ, env, clear=True):
+            self.assertEqual(
+                sandbox_root(None, "project_462000131"),
+                Path("/scratch/project_462000131/anisrahm/agent-sandboxes"),
+            )
 
     def test_create_writes_policy_and_enter_script(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

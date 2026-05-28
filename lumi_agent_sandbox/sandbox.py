@@ -39,7 +39,14 @@ def account_from_env(value: str | None) -> str:
 
 
 def sandbox_root(value: str | None, account: str) -> Path:
-    return Path(value or os.environ.get("LUMI_AGENT_SANDBOX_ROOT") or f"/scratch/{account}/agent-sandboxes").expanduser()
+    root = value or os.environ.get("LUMI_AGENT_SANDBOX_ROOT")
+    if root:
+        return Path(root).expanduser()
+
+    user = os.environ.get("USER")
+    if not user:
+        raise ValueError("provide --root or set USER")
+    return Path(f"/scratch/{account}/{user}/agent-sandboxes")
 
 
 def create_sandbox(name: str, root: Path, account: str, agent_image: str, force: bool = False) -> Sandbox:

@@ -25,14 +25,14 @@ lumi-agent-sandbox destroy my-task --yes
 By default, sandboxes are created under:
 
 ```text
-/scratch/project_462000131/agent-sandboxes
+/scratch/project_462000131/$USER/agent-sandboxes
 ```
 
 Override that with:
 
 ```sh
 lumi-agent-sandbox --account project_other create my-task
-lumi-agent-sandbox --root /scratch/project_other/agent-sandboxes create my-task
+lumi-agent-sandbox --root /scratch/project_other/$USER/agent-sandboxes create my-task
 ```
 
 ## Slurm Policy
