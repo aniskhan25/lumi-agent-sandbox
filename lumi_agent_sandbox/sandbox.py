@@ -11,6 +11,7 @@ from pathlib import Path
 
 
 DEFAULT_AGENT_IMAGE = "/appl/local/laifs/containers/laifs-agent-env.sif"
+DEFAULT_ACCOUNT = "project_462000131"
 TASK_RE = re.compile(r"[^a-zA-Z0-9._-]+")
 
 
@@ -34,10 +35,7 @@ def task_id(name: str) -> str:
 
 
 def account_from_env(value: str | None) -> str:
-    account = value or os.environ.get("LUMI_ACCOUNT") or os.environ.get("PROJECT")
-    if not account:
-        raise ValueError("provide --account, LUMI_ACCOUNT, or PROJECT")
-    return account
+    return value or os.environ.get("LUMI_ACCOUNT") or os.environ.get("PROJECT") or DEFAULT_ACCOUNT
 
 
 def sandbox_root(value: str | None, account: str) -> Path:

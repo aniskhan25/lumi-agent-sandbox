@@ -5,13 +5,16 @@ import unittest
 from pathlib import Path
 
 from lumi_agent_sandbox.cli import main
-from lumi_agent_sandbox.sandbox import create_sandbox, destroy_sandbox, read_policy, task_id
+from lumi_agent_sandbox.sandbox import account_from_env, create_sandbox, destroy_sandbox, read_policy, task_id
 from lumi_agent_sandbox.slurm import PolicyError, parse_sbatch_directives, submit_job
 
 
 class SandboxTests(unittest.TestCase):
     def test_task_id_is_directory_safe(self) -> None:
         self.assertEqual(task_id("My Test / Task"), "my-test-task")
+
+    def test_default_account_matches_lumi_project(self) -> None:
+        self.assertEqual(account_from_env(None), "project_462000131")
 
     def test_create_writes_policy_and_enter_script(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

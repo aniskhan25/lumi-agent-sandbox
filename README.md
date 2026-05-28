@@ -14,8 +14,6 @@ It does not try to replace the LAIF agent container. It wraps it with stricter d
 ## Basic Use
 
 ```sh
-export PROJECT=project_123456789
-
 lumi-agent-sandbox create my-task
 lumi-agent-sandbox enter my-task
 lumi-agent-sandbox submit my-task jobs/test.sh
@@ -27,13 +25,14 @@ lumi-agent-sandbox destroy my-task --yes
 By default, sandboxes are created under:
 
 ```text
-/scratch/$PROJECT/agent-sandboxes
+/scratch/project_462000131/agent-sandboxes
 ```
 
 Override that with:
 
 ```sh
-lumi-agent-sandbox --root /scratch/project_123456789/agent-sandboxes create my-task
+lumi-agent-sandbox --account project_other create my-task
+lumi-agent-sandbox --root /scratch/project_other/agent-sandboxes create my-task
 ```
 
 ## Slurm Policy
