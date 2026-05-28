@@ -5,14 +5,14 @@ import sys
 from pathlib import Path
 
 from .sandbox import (
-    DEFAULT_ACCOUNT,
-    DEFAULT_AGENT_IMAGE,
+    CONFIG_FILE,
     agent_image_from_env,
     agent_image_override_from_env,
     account_from_env,
     create_sandbox,
     destroy_sandbox,
     enter_sandbox,
+    load_config,
     load_sandbox,
     sandbox_root,
     shell_sandbox,
@@ -23,8 +23,8 @@ from .slurm import PolicyError, submit_job
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="lumi-agent-sandbox")
     parser.add_argument("--root", help="sandbox root, default: $LUMI_AGENT_SANDBOX_ROOT or /scratch/<account>/$USER/agent-sandboxes")
-    parser.add_argument("--account", help=f"LUMI project/account, default: $LUMI_ACCOUNT, $PROJECT, or {DEFAULT_ACCOUNT}")
-    parser.add_argument("--agent-image", help=f"agent Singularity image, default: $LUMI_AGENT_IMAGE, $LUMI_AGENT_SIF, or {DEFAULT_AGENT_IMAGE}")
+    parser.add_argument("--account", help=f"LUMI project/account, default: $LUMI_ACCOUNT, $PROJECT, or {CONFIG_FILE}")
+    parser.add_argument("--agent-image", help=f"agent Singularity image, default: $LUMI_AGENT_IMAGE, $LUMI_AGENT_SIF, or {CONFIG_FILE}")
 
     subparsers = parser.add_subparsers(dest="command", required=True)
 
@@ -50,11 +50,12 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     try:
-        account = account_from_env(args.account)
+        config = load_config()
+        account = account_from_env(args.account, config)
         root = sandbox_root(args.root, account)
 
         if args.command == "create":
-            agent_image = agent_image_from_env(args.agent_image)
+            agent_image = agent_image_from_env(args.agent_image, config)
             sandbox = create_sandbox(args.task, root, account, agent_image, args.force)
             print(sandbox.path)
             return 0

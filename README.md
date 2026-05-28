@@ -4,13 +4,14 @@ Small host-side harness for running OpenCode on LUMI inside a disposable task wo
 
 It creates one sandbox directory per task, launches the LAIF OpenCode SIF with strict mounts, and submits Slurm jobs only through a host-side policy check.
 
-Default project settings in this repo:
+Site defaults are stored in `lumi-agent-sandbox.yaml`:
 
-```text
+```yaml
 account: project_462000131
-sandbox root: /scratch/project_462000131/$USER/agent-sandboxes
-OpenCode SIF: /appl/local/laifs/agents/sif/opencode.sif
+agent_image: /appl/local/laifs/agents/sif/opencode.sif
 ```
+
+The default sandbox root is `/scratch/<account>/$USER/agent-sandboxes`.
 
 ## Quickstart On LUMI
 
@@ -138,6 +139,8 @@ lumi-agent-sandbox --account project_other create my-task
 lumi-agent-sandbox --root /scratch/project_other/$USER/agent-sandboxes create my-task
 export LUMI_AGENT_IMAGE=/path/to/other-agent.sif
 ```
+
+Resolution order is command-line flag, then environment variable, then `lumi-agent-sandbox.yaml`.
 
 Run local tests:
 

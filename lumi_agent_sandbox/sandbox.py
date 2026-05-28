@@ -7,8 +7,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 
-DEFAULT_AGENT_IMAGE = "/appl/local/laifs/agents/sif/opencode.sif"
-DEFAULT_ACCOUNT = "project_462000131"
+CONFIG_FILE = "lumi-agent-sandbox.yaml"
 TASK_RE = re.compile(r"[^a-zA-Z0-9._-]+")
 
 
@@ -31,12 +30,27 @@ def task_id(name: str) -> str:
     return cleaned
 
 
-def account_from_env(value: str | None) -> str:
-    return value or os.environ.get("LUMI_ACCOUNT") or os.environ.get("PROJECT") or DEFAULT_ACCOUNT
+def load_config(start: Path | None = None) -> dict[str, object]:
+    start = (start or Path.cwd()).resolve()
+    for directory in (start, *start.parents):
+        config_path = directory / CONFIG_FILE
+        if config_path.exists():
+            return read_policy(config_path)
+    return {}
 
 
-def agent_image_from_env(value: str | None) -> str:
-    return agent_image_override_from_env(value) or DEFAULT_AGENT_IMAGE
+def account_from_env(value: str | None, config: dict[str, object] | None = None) -> str:
+    account = value or os.environ.get("LUMI_ACCOUNT") or os.environ.get("PROJECT") or (config or {}).get("account")
+    if not account:
+        raise ValueError(f"provide --account, set LUMI_ACCOUNT, or add account to {CONFIG_FILE}")
+    return str(account)
+
+
+def agent_image_from_env(value: str | None, config: dict[str, object] | None = None) -> str:
+    image = agent_image_override_from_env(value) or (config or {}).get("agent_image")
+    if not image:
+        raise ValueError(f"provide --agent-image, set LUMI_AGENT_IMAGE, or add agent_image to {CONFIG_FILE}")
+    return str(image)
 
 
 def agent_image_override_from_env(value: str | None) -> str | None:

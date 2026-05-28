@@ -13,6 +13,7 @@ from lumi_agent_sandbox.sandbox import (
     agent_image_override_from_env,
     create_sandbox,
     destroy_sandbox,
+    load_config,
     load_sandbox,
     read_policy,
     sandbox_root,
@@ -25,8 +26,8 @@ class SandboxTests(unittest.TestCase):
     def test_task_id_is_directory_safe(self) -> None:
         self.assertEqual(task_id("My Test / Task"), "my-test-task")
 
-    def test_default_account_matches_lumi_project(self) -> None:
-        self.assertEqual(account_from_env(None), "project_462000131")
+    def test_account_comes_from_config(self) -> None:
+        self.assertEqual(account_from_env(None, {"account": "project_123"}), "project_123")
 
     def test_default_root_uses_user_directory(self) -> None:
         env = {key: value for key, value in os.environ.items() if key != "LUMI_AGENT_SANDBOX_ROOT"}
@@ -39,12 +40,29 @@ class SandboxTests(unittest.TestCase):
 
     def test_agent_image_comes_from_environment(self) -> None:
         with mock.patch.dict(os.environ, {"LUMI_AGENT_IMAGE": "/env/agent.sif"}, clear=True):
-            self.assertEqual(agent_image_from_env(None), "/env/agent.sif")
+            self.assertEqual(agent_image_from_env(None, {"agent_image": "/config/agent.sif"}), "/env/agent.sif")
             self.assertEqual(agent_image_override_from_env(None), "/env/agent.sif")
 
-    def test_default_agent_image_matches_lumi_opencode_sif(self) -> None:
+    def test_agent_image_comes_from_config(self) -> None:
         with mock.patch.dict(os.environ, {}, clear=True):
-            self.assertEqual(agent_image_from_env(None), "/appl/local/laifs/agents/sif/opencode.sif")
+            self.assertEqual(agent_image_from_env(None, {"agent_image": "/config/agent.sif"}), "/config/agent.sif")
+
+    def test_missing_agent_image_reports_config_file(self) -> None:
+        with mock.patch.dict(os.environ, {}, clear=True):
+            with self.assertRaisesRegex(ValueError, "lumi-agent-sandbox.yaml"):
+                agent_image_from_env(None, {})
+
+    def test_load_config_searches_parent_directories(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "lumi-agent-sandbox.yaml").write_text("account: project_123\nagent_image: /agent.sif\n", encoding="utf-8")
+            child = root / "nested"
+            child.mkdir()
+
+            config = load_config(child)
+
+            self.assertEqual(config["account"], "project_123")
+            self.assertEqual(config["agent_image"], "/agent.sif")
 
     def test_empty_agent_image_writes_clear_enter_error(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
