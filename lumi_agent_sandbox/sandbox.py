@@ -213,7 +213,10 @@ if [ ! -r "$AGENT_IMAGE" ]; then
   exit 2
 fi
 
-exec singularity exec \\
+exec env \\
+  SINGULARITYENV_HOME=/home/agent \\
+  SINGULARITYENV_PREPEND_PATH=/safe-bin \\
+  singularity run \\
   --cleanenv \\
   --containall \\
   --no-home \\
@@ -225,8 +228,7 @@ exec singularity exec \\
   --bind "$SANDBOX/logs:/logs" \\
   --bind "$SANDBOX/state/home:/home/agent" \\
   --bind "$SANDBOX/wrappers:/safe-bin:ro" \\
-  "$AGENT_IMAGE" \\
-  env HOME=/home/agent PATH=/safe-bin:/usr/local/bin:/usr/bin:/bin opencode
+  "$AGENT_IMAGE"
 """
     path = sandbox.path / "enter.sh"
     path.write_text(script, encoding="utf-8")
