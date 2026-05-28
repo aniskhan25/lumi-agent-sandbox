@@ -10,7 +10,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 
-DEFAULT_AGENT_IMAGE = ""
+DEFAULT_AGENT_IMAGE = "/appl/local/laifs/agents/sif/opencode.sif"
 DEFAULT_ACCOUNT = "project_462000131"
 TASK_RE = re.compile(r"[^a-zA-Z0-9._-]+")
 

@@ -40,6 +40,10 @@ class SandboxTests(unittest.TestCase):
         with mock.patch.dict(os.environ, {"LUMI_AGENT_IMAGE": "/env/agent.sif"}, clear=True):
             self.assertEqual(agent_image_from_env(None), "/env/agent.sif")
 
+    def test_default_agent_image_matches_lumi_opencode_sif(self) -> None:
+        with mock.patch.dict(os.environ, {}, clear=True):
+            self.assertEqual(agent_image_from_env(None), "/appl/local/laifs/agents/sif/opencode.sif")
+
     def test_empty_agent_image_writes_clear_enter_error(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             sandbox = create_sandbox("demo", Path(tmp), "project_123", "")

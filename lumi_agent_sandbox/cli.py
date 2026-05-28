@@ -6,6 +6,7 @@ from pathlib import Path
 
 from .sandbox import (
     DEFAULT_ACCOUNT,
+    DEFAULT_AGENT_IMAGE,
     agent_image_from_env,
     account_from_env,
     archive_sandbox,
@@ -24,7 +25,7 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="lumi-agent-sandbox")
     parser.add_argument("--root", help="sandbox root, default: $LUMI_AGENT_SANDBOX_ROOT or /scratch/<account>/$USER/agent-sandboxes")
     parser.add_argument("--account", help=f"LUMI project/account, default: $LUMI_ACCOUNT, $PROJECT, or {DEFAULT_ACCOUNT}")
-    parser.add_argument("--agent-image", help="agent Singularity image, default: $LUMI_AGENT_IMAGE or $LUMI_AGENT_SIF")
+    parser.add_argument("--agent-image", help=f"agent Singularity image, default: $LUMI_AGENT_IMAGE, $LUMI_AGENT_SIF, or {DEFAULT_AGENT_IMAGE}")
 
     subparsers = parser.add_subparsers(dest="command", required=True)
 
