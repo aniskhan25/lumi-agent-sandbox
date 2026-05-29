@@ -34,31 +34,6 @@ lumi-agent-sandbox create smoke-test
 SANDBOX=/scratch/project_462000131/$USER/agent-sandboxes/smoke-test
 ```
 
-Check the container mounts with a shell:
-
-```sh
-lumi-agent-sandbox shell smoke-test
-```
-
-Inside that shell, run:
-
-```sh
-pwd
-echo "$HOME"
-ls -la /workspace /input /output /jobs /logs
-sbatch --version
-srun --version
-salloc --version
-exit
-```
-
-Expected:
-
-- `pwd` is `/workspace`
-- `HOME` is `/home/agent`
-- `/input` is read-only
-- `sbatch`, `srun`, and `salloc` print the sandbox wrapper message
-
 Create a tiny Slurm job:
 
 ```sh
@@ -95,7 +70,7 @@ Start OpenCode:
 lumi-agent-sandbox enter smoke-test
 ```
 
-`enter` opens the OpenCode UI. Type agent prompts there. Use `shell` only when you want a normal container shell for mount checks.
+`enter` opens the OpenCode UI. Type agent prompts there.
 
 ## Flow
 

@@ -25,7 +25,6 @@ class SandboxTests(unittest.TestCase):
             self.assertTrue((sandbox.path / "work").is_dir())
             self.assertTrue((sandbox.path / "input").is_dir())
             self.assertTrue((sandbox.path / "enter.sh").exists())
-            self.assertTrue((sandbox.path / "shell.sh").exists())
             self.assertTrue((sandbox.path / "wrappers" / "sbatch").exists())
             self.assertTrue((sandbox.path / "wrappers" / "srun").exists())
 
@@ -34,11 +33,8 @@ class SandboxTests(unittest.TestCase):
             self.assertEqual(policy["agent_image"], "/agent.sif")
 
             enter = (sandbox.path / "enter.sh").read_text(encoding="utf-8")
-            shell = (sandbox.path / "shell.sh").read_text(encoding="utf-8")
             self.assertIn('--bind "$SANDBOX/input:/input:ro"', enter)
             self.assertIn("singularity run", enter)
-            self.assertIn("singularity exec", shell)
-            self.assertIn("PATH=/safe-bin:/usr/local/bin:/usr/bin:/bin", shell)
 
     def test_submit_enforces_policy_and_jobs_directory(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

@@ -74,7 +74,6 @@ def create_sandbox(name: str, root: Path, account: str, agent_image: str, force:
 
     _write_policy(sandbox)
     _write_enter_script(sandbox)
-    _write_shell_script(sandbox)
     _write_command_wrappers(sandbox)
     return sandbox
 
@@ -90,11 +89,6 @@ def load_sandbox(name: str, root: Path, account: str, agent_image: str | None = 
 
 def enter_sandbox(sandbox: Sandbox) -> None:
     script = _write_enter_script(sandbox)
-    os.execv("/bin/sh", ["/bin/sh", str(script)])
-
-
-def shell_sandbox(sandbox: Sandbox) -> None:
-    script = _write_shell_script(sandbox)
     os.execv("/bin/sh", ["/bin/sh", str(script)])
 
 
@@ -205,44 +199,6 @@ exec env \\
   "$AGENT_IMAGE"
 """
     path = sandbox.path / "enter.sh"
-    path.write_text(script, encoding="utf-8")
-    path.chmod(0o755)
-    return path
-
-
-def _write_shell_script(sandbox: Sandbox) -> Path:
-    script = f"""#!/bin/sh
-set -eu
-
-SANDBOX={_sh_quote(str(sandbox.path))}
-AGENT_IMAGE={_sh_quote(sandbox.agent_image)}
-
-if [ -z "$AGENT_IMAGE" ]; then
-  echo "No agent image configured. Set LUMI_AGENT_IMAGE or recreate with --agent-image /path/to/agent.sif." >&2
-  exit 2
-fi
-
-if [ ! -r "$AGENT_IMAGE" ]; then
-  echo "Agent image not found or not readable: $AGENT_IMAGE" >&2
-  echo "Set LUMI_AGENT_IMAGE or recreate with --agent-image /path/to/agent.sif." >&2
-  exit 2
-fi
-
-exec singularity exec \\
-  --cleanenv \\
-  --containall \\
-  --home "$SANDBOX/state/home:/home/agent" \\
-  --pwd /workspace \\
-  --bind "$SANDBOX/work:/workspace" \\
-  --bind "$SANDBOX/input:/input:ro" \\
-  --bind "$SANDBOX/output:/output" \\
-  --bind "$SANDBOX/jobs:/jobs" \\
-  --bind "$SANDBOX/logs:/logs" \\
-  --bind "$SANDBOX/wrappers:/safe-bin:ro" \\
-  "$AGENT_IMAGE" \\
-  env HOME=/home/agent PATH=/safe-bin:/usr/local/bin:/usr/bin:/bin /bin/sh
-"""
-    path = sandbox.path / "shell.sh"
     path.write_text(script, encoding="utf-8")
     path.chmod(0o755)
     return path

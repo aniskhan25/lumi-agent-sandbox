@@ -15,7 +15,6 @@ from .sandbox import (
     resolve_agent_image,
     resolve_agent_image_override,
     sandbox_root,
-    shell_sandbox,
 )
 from .slurm import PolicyError, submit_job
 
@@ -34,9 +33,6 @@ def main(argv: list[str] | None = None) -> int:
 
     enter = subparsers.add_parser("enter", help="enter the agent container")
     enter.add_argument("task")
-
-    shell = subparsers.add_parser("shell", help="open a shell in the sandbox container")
-    shell.add_argument("task")
 
     submit = subparsers.add_parser("submit", help="validate and submit a Slurm script")
     submit.add_argument("task")
@@ -64,10 +60,6 @@ def main(argv: list[str] | None = None) -> int:
 
         if args.command == "enter":
             enter_sandbox(sandbox)
-            return 0
-
-        if args.command == "shell":
-            shell_sandbox(sandbox)
             return 0
 
         if args.command == "submit":
