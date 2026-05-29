@@ -4,6 +4,27 @@ Small host-side harness for running OpenCode on LUMI inside a disposable task wo
 
 It creates one sandbox directory per task, starts the LAIF OpenCode SIF with strict mounts, and submits Slurm jobs only after a small host-side policy check.
 
+## Flow
+
+```mermaid
+sequenceDiagram
+    actor User
+    participant CLI as lumi-agent-sandbox CLI
+    participant Sandbox as Task sandbox
+    participant Container as OpenCode container
+    participant Slurm
+
+    User->>CLI: create smoke-test
+    CLI->>Sandbox: create directories and policy.yaml
+    User->>CLI: enter smoke-test
+    CLI->>Container: start OpenCode with sandbox mounts
+    Container->>Sandbox: edit work/ and jobs/
+    User->>CLI: submit smoke-test jobs/job.sh
+    CLI->>CLI: validate policy
+    CLI->>Slurm: sbatch
+    Slurm->>Sandbox: write logs/
+```
+
 ## Configure
 
 Check `lumi-agent-sandbox.yaml` after cloning. Change these values only if they do not match your LUMI project or OpenCode SIF path:
@@ -137,27 +158,6 @@ state/home/  container home directory
 wrappers/    blocked sbatch/srun/salloc commands inside the container
 policy.yaml  sandbox account, image, partitions, and resource limits
 enter.sh     generated container launch script
-```
-
-## Flow
-
-```mermaid
-sequenceDiagram
-    actor User
-    participant CLI as lumi-agent-sandbox
-    participant Sandbox as Task sandbox
-    participant Container as OpenCode container
-    participant Slurm
-
-    User->>CLI: create smoke-test
-    CLI->>Sandbox: create directories and policy.yaml
-    User->>CLI: enter smoke-test
-    CLI->>Container: start OpenCode with sandbox mounts
-    Container->>Sandbox: edit work/ and jobs/
-    User->>CLI: submit smoke-test jobs/job.sh
-    CLI->>CLI: validate policy
-    CLI->>Slurm: sbatch
-    Slurm->>Sandbox: write logs/
 ```
 
 ## Policy
