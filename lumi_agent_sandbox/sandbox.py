@@ -50,9 +50,8 @@ def resolve_agent_image(value: str | None, config: dict[str, object] | None = No
 
 
 def sandbox_root(value: str | None, account: str) -> Path:
-    root = value or os.environ.get("LUMI_AGENT_SANDBOX_ROOT")
-    if root:
-        return Path(root).expanduser()
+    if value:
+        return Path(value).expanduser()
 
     user = os.environ.get("USER")
     if not user:
@@ -60,9 +59,9 @@ def sandbox_root(value: str | None, account: str) -> Path:
     return Path(f"/scratch/{account}/{user}/agent-sandboxes")
 
 
-def create_sandbox(name: str, root: Path, account: str, agent_image: str, force: bool = False) -> Sandbox:
+def create_sandbox(name: str, root: Path, account: str, agent_image: str) -> Sandbox:
     sandbox = Sandbox(task_id(name), root.resolve(), account, agent_image)
-    if sandbox.path.exists() and not force:
+    if sandbox.path.exists():
         raise FileExistsError(f"sandbox already exists: {sandbox.path}")
 
     for child in ("work", "input", "output", "jobs", "logs", "state/home", "wrappers"):
@@ -74,13 +73,13 @@ def create_sandbox(name: str, root: Path, account: str, agent_image: str, force:
     return sandbox
 
 
-def load_sandbox(name: str, root: Path, account: str, agent_image: str | None = None) -> Sandbox:
+def load_sandbox(name: str, root: Path) -> Sandbox:
     task = task_id(name)
     policy_path = root / task / "policy.yaml"
     if not policy_path.exists():
         raise FileNotFoundError(f"sandbox not found: {root / task}")
     policy = read_policy(policy_path)
-    return Sandbox(task, root.resolve(), str(policy.get("account") or account), agent_image or str(policy.get("agent_image") or ""))
+    return Sandbox(task, root.resolve(), str(policy["account"]), str(policy["agent_image"]))
 
 
 def enter_sandbox(sandbox: Sandbox) -> None:
@@ -149,14 +148,10 @@ limits:
   max_time: "00:30:00"
   max_nodes: 1
   max_gpus_per_node: 1
-  max_array_size: 1
 
 allowed_partitions:
-  - small
-  - standard
   - dev-g
-  - small-g
-  - standard-g
+  - debug
 """
     (sandbox.path / "policy.yaml").write_text(policy, encoding="utf-8")
 

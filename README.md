@@ -152,7 +152,7 @@ Each sandbox has a `policy.yaml`. The generated default allows short, small jobs
 - max time: `00:30:00`
 - max nodes: `1`
 - max GPUs per node: `1`
-- allowed partitions: `small`, `standard`, `dev-g`, `small-g`, `standard-g`
+- allowed partitions: `dev-g`, `debug`
 
 `submit` accepts only scripts inside the sandbox `jobs/` directory. It forces Slurm stdout/stderr into the sandbox `logs/` directory and rejects obvious references to home directories or broad project/scratch paths outside the sandbox.
 

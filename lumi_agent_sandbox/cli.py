@@ -20,7 +20,7 @@ from .slurm import PolicyError, submit_job
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="lumi-agent-sandbox")
-    parser.add_argument("--root", help="sandbox root, default: $LUMI_AGENT_SANDBOX_ROOT or /scratch/<account>/$USER/agent-sandboxes")
+    parser.add_argument("--root", help="sandbox root, default: /scratch/<account>/$USER/agent-sandboxes")
     parser.add_argument("--account", help=f"LUMI project/account, default: {CONFIG_FILE}")
     parser.add_argument("--agent-image", help=f"agent Singularity image, default: {CONFIG_FILE}")
 
@@ -28,7 +28,6 @@ def main(argv: list[str] | None = None) -> int:
 
     create = subparsers.add_parser("create", help="create a task sandbox")
     create.add_argument("task")
-    create.add_argument("--force", action="store_true")
 
     enter = subparsers.add_parser("enter", help="enter the agent container")
     enter.add_argument("task")
@@ -51,11 +50,11 @@ def main(argv: list[str] | None = None) -> int:
 
         if args.command == "create":
             agent_image = resolve_agent_image(args.agent_image, config)
-            sandbox = create_sandbox(args.task, root, account, agent_image, args.force)
+            sandbox = create_sandbox(args.task, root, account, agent_image)
             print(sandbox.path)
             return 0
 
-        sandbox = load_sandbox(args.task, root, account, args.agent_image)
+        sandbox = load_sandbox(args.task, root)
 
         if args.command == "enter":
             enter_sandbox(sandbox)

@@ -54,6 +54,11 @@ class SandboxTests(unittest.TestCase):
             with self.assertRaisesRegex(PolicyError, "requested time"):
                 submit_job(sandbox, too_long, dry_run=True)
 
+            array = sandbox.path / "jobs" / "array.sh"
+            array.write_text("#!/bin/sh\n#SBATCH --partition=dev-g\n#SBATCH --array=1-2\nhostname\n", encoding="utf-8")
+            with self.assertRaisesRegex(PolicyError, "arrays"):
+                submit_job(sandbox, array, dry_run=True)
+
             outside = sandbox.path / "jobs" / "outside.sh"
             outside.write_text("#!/bin/sh\npython /pfs/lustrep4/scratch/project_123/real-repo/train.py\n", encoding="utf-8")
             with self.assertRaisesRegex(PolicyError, "outside sandbox"):

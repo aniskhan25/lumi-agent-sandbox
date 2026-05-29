@@ -95,9 +95,8 @@ def validate_job(sandbox: Sandbox, policy: dict[str, object], options: dict[str,
     if gpus > int(limits.get("max_gpus_per_node", 0)):
         raise PolicyError(f"requested GPUs per node {gpus} exceeds max_gpus_per_node {limits.get('max_gpus_per_node')}")
 
-    array_size = _array_size(options.get("array"))
-    if array_size > int(limits.get("max_array_size", 1)):
-        raise PolicyError(f"array size {array_size} exceeds max_array_size {limits.get('max_array_size')}")
+    if "array" in options:
+        raise PolicyError("job arrays are not allowed")
 
     _reject_obvious_outside_paths(sandbox, script_text)
 
@@ -165,20 +164,6 @@ def _requested_gpus(options: dict[str, str], defaults: dict[str, object]) -> int
     if match:
         return int(match.group(1))
     return int(defaults.get("gpus_per_node", 0))
-
-
-def _array_size(value: str | None) -> int:
-    if not value:
-        return 1
-    value = value.split("%", 1)[0]
-    total = 0
-    for part in value.split(","):
-        if "-" in part:
-            start, end = part.split("-", 1)
-            total += int(end) - int(start) + 1
-        else:
-            total += 1
-    return total
 
 
 def _reject_obvious_outside_paths(sandbox: Sandbox, script_text: str) -> None:
