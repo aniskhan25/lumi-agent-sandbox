@@ -46,14 +46,13 @@ Set these values for the examples below:
 
 ```sh
 PROJECT=project_462000131
-REPO_URL=<repo-url>
 ```
 
 Run from scratch:
 
 ```sh
 cd /scratch/$PROJECT/$USER
-git clone "$REPO_URL" lumi-agent-sandbox
+git clone https://github.com/aniskhan25/lumi-agent-sandbox.git
 cd lumi-agent-sandbox
 module load cray-python
 python3 -m pip install --user -e .
@@ -79,15 +78,10 @@ Set the sandbox path for the next commands:
 SANDBOX=/scratch/$PROJECT/$USER/agent-sandboxes/smoke-test
 ```
 
-Create this file:
-
-```text
-$SANDBOX/jobs/hostname.sh
-```
-
-File content:
+Create a tiny Slurm job:
 
 ```sh
+cat > "$SANDBOX/jobs/hostname.sh" <<'EOF'
 #!/bin/sh
 #SBATCH --partition=dev-g
 #SBATCH --time=00:02:00
@@ -96,6 +90,7 @@ File content:
 hostname
 pwd
 ls -la
+EOF
 ```
 
 Submit the job through the sandbox harness:
@@ -113,7 +108,7 @@ Submitted batch job 12345678
 Check the queue:
 
 ```sh
-squeue -A "$PROJECT"
+squeue -u "$USER"
 ```
 
 Inspect logs after the job finishes:
