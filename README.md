@@ -97,6 +97,54 @@ lumi-agent-sandbox enter smoke-test
 
 `enter` opens the OpenCode UI. Type agent prompts there. Use `shell` only when you want a normal container shell for mount checks.
 
+## Flow
+
+```mermaid
+sequenceDiagram
+    actor User
+    participant CLI as lumi-agent-sandbox CLI
+    participant Sandbox as Task sandbox
+    participant Container as OpenCode container
+    participant Slurm as Slurm scheduler
+    participant Job as Scheduled job
+
+    User->>CLI: create smoke-test
+    CLI->>Sandbox: create work/, input/, output/, jobs/, logs/
+    CLI->>Sandbox: create state/home/, wrappers/
+    CLI->>Sandbox: write policy.yaml
+    CLI->>Sandbox: write enter.sh
+
+    User->>Sandbox: copy or clone task files into work/
+
+    User->>CLI: enter smoke-test
+    CLI->>Container: start OpenCode UI with sandbox mounts
+    Container->>Sandbox: /workspace -> work/
+    Container->>Sandbox: /input -> input/ read-only
+    Container->>Sandbox: /output -> output/
+    Container->>Sandbox: /jobs -> jobs/
+    Container->>Sandbox: /logs -> logs/
+    Container->>Sandbox: /home/agent -> state/home/
+    Container->>Sandbox: /safe-bin -> wrappers/
+
+    User->>Container: ask agent to edit code or create job script
+    Container->>Sandbox: edit files in work/
+    Container->>Sandbox: write Slurm script in jobs/
+
+    User->>CLI: submit smoke-test jobs/job.sh
+    CLI->>Sandbox: read policy.yaml
+    CLI->>CLI: validate partition, time, nodes, GPUs, paths
+    CLI->>Slurm: sbatch from sandbox work/
+    Slurm->>Job: run scheduled job
+
+    Job->>Sandbox: write stdout/stderr to logs/
+    Job->>Sandbox: write results to output/
+
+    User->>Sandbox: inspect logs/ and output/
+    User->>Sandbox: review work/ with git status and git diff
+    User->>CLI: destroy smoke-test --yes
+    CLI->>Sandbox: delete task sandbox
+```
+
 ## Daily Use
 
 For a real task:
