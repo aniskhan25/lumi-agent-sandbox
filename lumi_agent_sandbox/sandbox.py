@@ -43,14 +43,10 @@ def resolve_account(value: str | None, config: dict[str, object] | None = None) 
 
 
 def resolve_agent_image(value: str | None, config: dict[str, object] | None = None) -> str:
-    image = resolve_agent_image_override(value) or (config or {}).get("agent_image")
+    image = value or (config or {}).get("agent_image")
     if not image:
-        raise ValueError(f"provide --agent-image, set LUMI_AGENT_IMAGE, or add agent_image to {CONFIG_FILE}")
+        raise ValueError(f"provide --agent-image or add agent_image to {CONFIG_FILE}")
     return str(image)
-
-
-def resolve_agent_image_override(value: str | None) -> str | None:
-    return value or os.environ.get("LUMI_AGENT_IMAGE") or os.environ.get("LUMI_AGENT_SIF")
 
 
 def sandbox_root(value: str | None, account: str) -> Path:
@@ -173,13 +169,13 @@ SANDBOX={_sh_quote(str(sandbox.path))}
 AGENT_IMAGE={_sh_quote(sandbox.agent_image)}
 
 if [ -z "$AGENT_IMAGE" ]; then
-  echo "No agent image configured. Set LUMI_AGENT_IMAGE or recreate with --agent-image /path/to/agent.sif." >&2
+  echo "No agent image configured. Add agent_image to lumi-agent-sandbox.yaml or recreate with --agent-image /path/to/agent.sif." >&2
   exit 2
 fi
 
 if [ ! -r "$AGENT_IMAGE" ]; then
   echo "Agent image not found or not readable: $AGENT_IMAGE" >&2
-  echo "Set LUMI_AGENT_IMAGE or recreate with --agent-image /path/to/agent.sif." >&2
+  echo "Add agent_image to lumi-agent-sandbox.yaml or recreate with --agent-image /path/to/agent.sif." >&2
   exit 2
 fi
 

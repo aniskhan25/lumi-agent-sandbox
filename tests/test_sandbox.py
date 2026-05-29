@@ -17,8 +17,8 @@ class SandboxTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "account"):
             resolve_account(None, {})
 
-        with mock.patch.dict("os.environ", {"LUMI_AGENT_IMAGE": "/env/agent.sif"}, clear=True):
-            self.assertEqual(resolve_agent_image(None, {"agent_image": "/config/agent.sif"}), "/env/agent.sif")
+        self.assertEqual(resolve_agent_image(None, {"agent_image": "/config/agent.sif"}), "/config/agent.sif")
+        self.assertEqual(resolve_agent_image("/flag/agent.sif", {"agent_image": "/config/agent.sif"}), "/flag/agent.sif")
 
     def test_create_writes_expected_sandbox_files(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

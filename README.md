@@ -161,11 +161,11 @@ Override defaults when needed:
 ```sh
 lumi-agent-sandbox --account project_other create my-task
 lumi-agent-sandbox --root /scratch/project_other/$USER/agent-sandboxes create my-task
-export LUMI_AGENT_IMAGE=/path/to/other-agent.sif
+lumi-agent-sandbox --agent-image /path/to/other-agent.sif create my-task
 ```
 
 Account resolution order is command-line flag, then `lumi-agent-sandbox.yaml` in the current directory.
-Agent image resolution order is command-line flag, then environment variable, then `lumi-agent-sandbox.yaml` in the current directory.
+Agent image resolution order is command-line flag, then `lumi-agent-sandbox.yaml` in the current directory.
 
 Run local tests:
 
