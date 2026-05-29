@@ -36,9 +36,9 @@ def load_config() -> dict[str, object]:
 
 
 def resolve_account(value: str | None, config: dict[str, object] | None = None) -> str:
-    account = value or os.environ.get("LUMI_ACCOUNT") or os.environ.get("PROJECT") or (config or {}).get("account")
+    account = value or (config or {}).get("account")
     if not account:
-        raise ValueError(f"provide --account, set LUMI_ACCOUNT, or add account to {CONFIG_FILE}")
+        raise ValueError(f"provide --account or add account to {CONFIG_FILE}")
     return str(account)
 
 

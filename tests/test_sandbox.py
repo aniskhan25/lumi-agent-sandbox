@@ -14,6 +14,8 @@ class SandboxTests(unittest.TestCase):
     def test_config_resolution_and_task_names_are_safe(self) -> None:
         self.assertEqual(task_id("My Test / Task"), "my-test-task")
         self.assertEqual(resolve_account(None, {"account": "project_123"}), "project_123")
+        with self.assertRaisesRegex(ValueError, "account"):
+            resolve_account(None, {})
 
         with mock.patch.dict("os.environ", {"LUMI_AGENT_IMAGE": "/env/agent.sif"}, clear=True):
             self.assertEqual(resolve_agent_image(None, {"agent_image": "/config/agent.sif"}), "/env/agent.sif")

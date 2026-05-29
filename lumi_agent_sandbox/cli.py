@@ -22,7 +22,7 @@ from .slurm import PolicyError, submit_job
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="lumi-agent-sandbox")
     parser.add_argument("--root", help="sandbox root, default: $LUMI_AGENT_SANDBOX_ROOT or /scratch/<account>/$USER/agent-sandboxes")
-    parser.add_argument("--account", help=f"LUMI project/account, default: $LUMI_ACCOUNT, $PROJECT, or {CONFIG_FILE}")
+    parser.add_argument("--account", help=f"LUMI project/account, default: {CONFIG_FILE}")
     parser.add_argument("--agent-image", help=f"agent Singularity image, default: $LUMI_AGENT_IMAGE, $LUMI_AGENT_SIF, or {CONFIG_FILE}")
 
     subparsers = parser.add_subparsers(dest="command", required=True)

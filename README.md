@@ -164,7 +164,8 @@ lumi-agent-sandbox --root /scratch/project_other/$USER/agent-sandboxes create my
 export LUMI_AGENT_IMAGE=/path/to/other-agent.sif
 ```
 
-Resolution order is command-line flag, then environment variable, then `lumi-agent-sandbox.yaml` in the current directory.
+Account resolution order is command-line flag, then `lumi-agent-sandbox.yaml` in the current directory.
+Agent image resolution order is command-line flag, then environment variable, then `lumi-agent-sandbox.yaml` in the current directory.
 
 Run local tests:
 
