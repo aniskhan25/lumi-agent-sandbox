@@ -2,13 +2,23 @@ from __future__ import annotations
 
 import os
 import re
+import shlex
 import shutil
+import signal
+import subprocess
+from collections.abc import Callable
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from pathlib import Path
 
+import yaml
 
-CONFIG_FILE = "lumi-agent-sandbox.yaml"
+from . import agentconfig
+from .policy import CONFIG_FILE, DEFAULT_JOB_OPTIONS, read_yaml
+
+
 TASK_RE = re.compile(r"[^a-zA-Z0-9._-]+")
+SANDBOX_DIRS = ("work", "input", "output", "jobs", "logs", "requests", "audit", "agent", "state/home", "wrappers")
 
 
 @dataclass(frozen=True)
@@ -28,11 +38,6 @@ def task_id(name: str) -> str:
     if not cleaned:
         raise ValueError("task name must contain at least one letter or number")
     return cleaned
-
-
-def load_config() -> dict[str, object]:
-    path = Path(CONFIG_FILE)
-    return read_policy(path) if path.exists() else {}
 
 
 def resolve_account(value: str | None, config: dict[str, object] | None = None) -> str:
@@ -59,16 +64,24 @@ def sandbox_root(value: str | None, account: str) -> Path:
     return Path(f"/scratch/{account}/{user}/agent-sandboxes")
 
 
-def create_sandbox(name: str, root: Path, account: str, agent_image: str) -> Sandbox:
+def create_sandbox(
+    name: str,
+    root: Path,
+    account: str,
+    agent_image: str,
+    site: dict[str, object] | None = None,
+) -> Sandbox:
+    site = site or {}
     sandbox = Sandbox(task_id(name), root.resolve(), account, agent_image)
     if sandbox.path.exists():
         raise FileExistsError(f"sandbox already exists: {sandbox.path}")
 
-    for child in ("work", "input", "output", "jobs", "logs", "state/home", "wrappers"):
+    for child in SANDBOX_DIRS:
         (sandbox.path / child).mkdir(parents=True, exist_ok=True)
 
     _write_policy(sandbox)
-    _write_enter_script(sandbox)
+    agentconfig.write_config(sandbox.path, site)
+    write_enter_script(sandbox, site)
     _write_command_wrappers(sandbox)
     return sandbox
 
@@ -78,115 +91,149 @@ def load_sandbox(name: str, root: Path) -> Sandbox:
     policy_path = root / task / "policy.yaml"
     if not policy_path.exists():
         raise FileNotFoundError(f"sandbox not found: {root / task}")
-    policy = read_policy(policy_path)
+    policy = read_yaml(policy_path)
     return Sandbox(task, root.resolve(), str(policy["account"]), str(policy["agent_image"]))
 
 
-def enter_sandbox(sandbox: Sandbox) -> None:
-    script = _write_enter_script(sandbox)
-    os.execv("/bin/sh", ["/bin/sh", str(script)])
+def sandbox_policy(sandbox: Sandbox) -> dict[str, object]:
+    """The sandbox's own policy. Agent-writable, so it may only narrow site limits."""
+    return read_yaml(sandbox.path / "policy.yaml")
 
 
-def destroy_sandbox(sandbox: Sandbox, yes: bool) -> None:
+def mount_args(sandbox: Sandbox) -> list[str]:
+    """Bind mounts shared by the agent container and by submitted jobs."""
+    path = sandbox.path
+    return [
+        "--home", f"{path}/state/home:/home/agent",
+        "--bind", f"{path}/work:/workspace",
+        "--bind", f"{path}/input:/input:ro",
+        "--bind", f"{path}/output:/output",
+        "--bind", f"{path}/logs:/logs",
+    ]
+
+
+def agent_mount_args(sandbox: Sandbox) -> list[str]:
+    """The agent also gets jobs/, the request channel, and the /safe-bin wrappers.
+
+    Jobs deliberately get none of these: a job that could write to requests/
+    would be able to submit further jobs and escape the session budget.
+    """
+    path = sandbox.path
+    return mount_args(sandbox) + [
+        "--bind", f"{path}/jobs:/jobs",
+        "--bind", f"{path}/requests:/requests",
+        "--bind", f"{path}/wrappers:/safe-bin:ro",
+    ]
+
+
+def enter_sandbox(
+    sandbox: Sandbox,
+    site: dict[str, object] | None = None,
+    serve: Callable[[], None] | None = None,
+) -> int:
+    """Run the agent container in the foreground.
+
+    `serve` is the broker loop; it runs as a child for exactly as long as the
+    container does, so the agent's request channel is answered only while a
+    session is actually open. It is injected rather than imported to keep the
+    dependency pointing one way.
+    """
+    site = site or {}
+    agentconfig.write_config(sandbox.path, site)
+    script = write_enter_script(sandbox, site)
+    pid = _fork(serve) if serve else 0
+    try:
+        return subprocess.run(["/bin/sh", str(script)], check=False).returncode
+    finally:
+        if pid:
+            _terminate(pid)
+
+
+def _fork(serve: Callable[[], None]) -> int:
+    pid = os.fork()
+    if pid:
+        return pid
+    try:
+        serve()
+    finally:
+        os._exit(0)
+
+
+def _terminate(pid: int) -> None:
+    try:
+        os.kill(pid, signal.SIGTERM)
+        os.waitpid(pid, 0)
+    except (ProcessLookupError, ChildProcessError):
+        pass
+
+
+def destroy_sandbox(sandbox: Sandbox, yes: bool) -> Path | None:
     if not yes:
         raise ValueError("destroy requires --yes")
     root = sandbox.root.resolve()
     target = sandbox.path.resolve()
     if root == target or root not in target.parents:
         raise ValueError(f"refusing to delete path outside sandbox root: {target}")
+    kept = archive_audit(sandbox)
     shutil.rmtree(target)
+    return kept
 
 
-def read_policy(path: Path) -> dict[str, object]:
-    data: dict[str, object] = {}
-    section: str | None = None
+def archive_audit(sandbox: Sandbox) -> Path | None:
+    """Copy the audit trail out before the sandbox goes.
 
-    for raw_line in path.read_text(encoding="utf-8").splitlines():
-        line = raw_line.split("#", 1)[0].rstrip()
-        if not line:
-            continue
-
-        if not line.startswith(" "):
-            key, sep, value = line.partition(":")
-            if not sep:
-                raise ValueError(f"invalid policy line: {raw_line}")
-            section = key.strip()
-            data[section] = _parse_scalar(value.strip()) if value.strip() else {}
-            continue
-
-        if section is None:
-            raise ValueError(f"policy entry without section: {raw_line}")
-
-        item = line.strip()
-        if item.startswith("- "):
-            if not isinstance(data.get(section), list):
-                data[section] = []
-            data[section].append(_parse_scalar(item[2:].strip()))  # type: ignore[union-attr]
-            continue
-
-        key, sep, value = item.partition(":")
-        if not sep:
-            raise ValueError(f"invalid policy line: {raw_line}")
-        if not isinstance(data.get(section), dict):
-            data[section] = {}
-        data[section][key.strip()] = _parse_scalar(value.strip())  # type: ignore[index]
-
-    return data
+    An audit record that is deleted along with the thing it describes is not an
+    audit record, so the manifest, job log and verification results outlive it.
+    """
+    audit = sandbox.path / "audit"
+    if not audit.is_dir() or not any(audit.iterdir()):
+        return None
+    stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S")
+    destination = sandbox.root / ".audit" / f"{sandbox.task}-{stamp}"
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copytree(audit, destination)
+    return destination
 
 
 def _write_policy(sandbox: Sandbox) -> None:
-    policy = f"""account: {sandbox.account}
-agent_image: {_yaml_quote(sandbox.agent_image)}
-
-defaults:
-  partition: dev-g
-  time: "00:15:00"
-  nodes: 1
-  gpus_per_node: 0
-
-limits:
-  max_time: "00:30:00"
-  max_nodes: 1
-  max_gpus_per_node: 1
-
-allowed_partitions:
-  - dev-g
-  - debug
-"""
-    (sandbox.path / "policy.yaml").write_text(policy, encoding="utf-8")
+    data = {
+        "account": sandbox.account,
+        "agent_image": sandbox.agent_image,
+        "defaults": dict(DEFAULT_JOB_OPTIONS),
+    }
+    header = (
+        "# Per-sandbox policy.\n"
+        "# A 'limits:' section here may only narrow the site limits; any value that\n"
+        f"# would loosen them is ignored. Site limits live in {CONFIG_FILE}.\n"
+    )
+    body = yaml.safe_dump(data, sort_keys=False, default_flow_style=False)
+    (sandbox.path / "policy.yaml").write_text(header + body, encoding="utf-8")
 
 
-def _write_enter_script(sandbox: Sandbox) -> Path:
+def write_enter_script(sandbox: Sandbox, site: dict[str, object] | None = None) -> Path:
+    site = site or {}
+    mounts = _shell_args(agent_mount_args(sandbox) + agentconfig.config_mount(sandbox.path, site))
+    environment = {"SINGULARITYENV_PREPEND_PATH": "/safe-bin"}
+    environment.update({f"SINGULARITYENV_{k}": v for k, v in agentconfig.container_env(site).items()})
+    exports = " \\\n  ".join(f"{key}={shlex.quote(value)}" for key, value in environment.items())
     script = f"""#!/bin/sh
 set -eu
 
-SANDBOX={_sh_quote(str(sandbox.path))}
-AGENT_IMAGE={_sh_quote(sandbox.agent_image)}
-
-if [ -z "$AGENT_IMAGE" ]; then
-  echo "No agent image configured. Add agent_image to lumi-agent-sandbox.yaml or recreate with --agent-image /path/to/agent.sif." >&2
-  exit 2
-fi
+AGENT_IMAGE={shlex.quote(sandbox.agent_image)}
 
 if [ ! -r "$AGENT_IMAGE" ]; then
   echo "Agent image not found or not readable: $AGENT_IMAGE" >&2
-  echo "Add agent_image to lumi-agent-sandbox.yaml or recreate with --agent-image /path/to/agent.sif." >&2
+  echo "Add agent_image to {CONFIG_FILE} or recreate with --agent-image /path/to/agent.sif." >&2
   exit 2
 fi
 
 exec env \\
-  SINGULARITYENV_PREPEND_PATH=/safe-bin \\
+  {exports} \\
   singularity run \\
   --cleanenv \\
   --containall \\
-  --home "$SANDBOX/state/home:/home/agent" \\
   --pwd /workspace \\
-  --bind "$SANDBOX/work:/workspace" \\
-  --bind "$SANDBOX/input:/input:ro" \\
-  --bind "$SANDBOX/output:/output" \\
-  --bind "$SANDBOX/jobs:/jobs" \\
-  --bind "$SANDBOX/logs:/logs" \\
-  --bind "$SANDBOX/wrappers:/safe-bin:ro" \\
+  {mounts} \\
   "$AGENT_IMAGE"
 """
     path = sandbox.path / "enter.sh"
@@ -196,28 +243,122 @@ exec env \\
 
 
 def _write_command_wrappers(sandbox: Sandbox) -> None:
-    script = """#!/bin/sh
-echo "Use 'lumi-agent-sandbox submit <task> jobs/<script.sh>' from the host shell." >&2
+    blocked = """#!/bin/sh
+echo "Direct Slurm commands are not available in the sandbox." >&2
+echo "Use: lumi-job submit jobs/<script.sh>" >&2
 exit 2
 """
     for name in ("sbatch", "srun", "salloc"):
-        path = sandbox.path / "wrappers" / name
-        path.write_text(script, encoding="utf-8")
-        path.chmod(0o755)
+        _write_wrapper(sandbox, name, blocked)
+    _write_wrapper(sandbox, "lumi-job", LUMI_JOB)
 
 
-def _parse_scalar(value: str) -> object:
-    value = value.strip()
-    if len(value) >= 2 and value[0] == value[-1] and value[0] in {"'", '"'}:
-        return value[1:-1]
-    if value.isdecimal():
-        return int(value)
-    return value
+def _shell_args(args: list[str]) -> str:
+    """Render flag/value pairs one per line for a generated shell script."""
+    pairs = [f"{args[i]} {shlex.quote(args[i + 1])}" for i in range(0, len(args), 2)]
+    return " \\\n  ".join(pairs)
 
 
-def _sh_quote(value: str) -> str:
-    return "'" + value.replace("'", "'\"'\"'") + "'"
+def _write_wrapper(sandbox: Sandbox, name: str, script: str) -> None:
+    path = sandbox.path / "wrappers" / name
+    path.write_text(script, encoding="utf-8")
+    path.chmod(0o755)
 
 
-def _yaml_quote(value: str) -> str:
-    return '"' + value.replace("\\", "\\\\").replace('"', '\\"') + '"'
+LUMI_JOB = r"""#!/bin/sh
+# Ask the host-side broker to act on a Slurm job. No credentials live here:
+# this writes a request into /requests and waits for the broker's result.
+set -eu
+
+REQUESTS=/requests
+TIMEOUT=120
+
+usage() {
+  echo "usage: lumi-job submit <script> [--partition P] [--time T] [--nodes N] [--gpus N]" >&2
+  echo "       lumi-job status <job-id>" >&2
+  echo "       lumi-job cancel <job-id>" >&2
+  exit 2
+}
+
+safe() {
+  case "$2" in
+    "" | *[!A-Za-z0-9._/:-]*) echo "error: unsafe value for $1: $2" >&2; exit 2 ;;
+  esac
+}
+
+[ $# -ge 2 ] || usage
+OPERATION=$1
+shift
+
+PARTITION=""
+TIME=""
+NODES=""
+GPUS=""
+SCRIPT=""
+JOB_ID=""
+
+case $OPERATION in
+  submit)
+    SCRIPT=$1
+    shift
+    safe script "$SCRIPT"
+    while [ $# -gt 0 ]; do
+      [ $# -ge 2 ] || usage
+      case $1 in
+        --partition) PARTITION=$2 ;;
+        --time) TIME=$2 ;;
+        --nodes) NODES=$2 ;;
+        --gpus) GPUS=$2 ;;
+        *) usage ;;
+      esac
+      safe "$1" "$2"
+      shift 2
+    done
+    ;;
+  status | cancel)
+    JOB_ID=$1
+    shift
+    [ $# -eq 0 ] || usage
+    safe job_id "$JOB_ID"
+    ;;
+  *)
+    usage
+    ;;
+esac
+
+if [ ! -d "$REQUESTS" ]; then
+  echo "error: no request channel at $REQUESTS" >&2
+  exit 1
+fi
+
+ID="$(date -u +%Y%m%dT%H%M%S)-$$"
+REQUEST="$REQUESTS/$ID.request.yaml"
+RESULT="$REQUESTS/$ID.result.yaml"
+
+{
+  echo "operation: \"$OPERATION\""
+  [ -z "$SCRIPT" ] || echo "script: \"$SCRIPT\""
+  [ -z "$JOB_ID" ] || echo "job_id: \"$JOB_ID\""
+  [ -z "$PARTITION" ] || echo "partition: \"$PARTITION\""
+  [ -z "$TIME" ] || echo "time: \"$TIME\""
+  [ -z "$NODES" ] || echo "nodes: \"$NODES\""
+  [ -z "$GPUS" ] || echo "gpus: \"$GPUS\""
+} > "$REQUEST.tmp"
+mv "$REQUEST.tmp" "$REQUEST"
+
+elapsed=0
+while [ "$elapsed" -lt "$TIMEOUT" ]; do
+  if [ -f "$RESULT" ]; then
+    cat "$RESULT"
+    if grep -qE '^status: (rejected|error)' "$RESULT"; then
+      exit 1
+    fi
+    exit 0
+  fi
+  sleep 1
+  elapsed=$((elapsed + 1))
+done
+
+echo "error: no response from the broker after ${TIMEOUT}s; is it running?" >&2
+exit 1
+"""

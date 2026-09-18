@@ -5,47 +5,8 @@ import shlex
 import subprocess
 from pathlib import Path
 
-from .sandbox import Sandbox, read_policy
-
-
-class PolicyError(ValueError):
-    pass
-
-
-def submit_job(sandbox: Sandbox, script: Path, dry_run: bool = False) -> str:
-    script = script.resolve()
-    jobs_dir = (sandbox.path / "jobs").resolve()
-    if jobs_dir not in script.parents:
-        raise PolicyError(f"job script must be inside {jobs_dir}")
-    if not script.exists():
-        raise FileNotFoundError(script)
-
-    policy = read_policy(sandbox.path / "policy.yaml")
-    text = script.read_text(encoding="utf-8")
-    directives = parse_sbatch_directives(text)
-    validate_job(sandbox, policy, directives, text)
-    submit_options = effective_submit_options(policy, directives)
-
-    logs = sandbox.path / "logs"
-    command = [
-        "sbatch",
-        f"--account={policy['account']}",
-        f"--partition={submit_options['partition']}",
-        f"--time={submit_options['time']}",
-        f"--nodes={submit_options['nodes']}",
-        f"--output={logs}/%x-%j.out",
-        f"--error={logs}/%x-%j.err",
-    ]
-    if submit_options["gpus_per_node"] > 0:
-        command.append(f"--gpus-per-node={submit_options['gpus_per_node']}")
-    command.append(str(script))
-    if dry_run:
-        return shlex.join(command)
-
-    result = subprocess.run(command, cwd=sandbox.path / "work", text=True, capture_output=True, check=False)
-    if result.returncode != 0:
-        raise RuntimeError(result.stderr.strip() or result.stdout.strip() or "sbatch failed")
-    return result.stdout.strip()
+from .policy import PolicyError, parse_slurm_time
+from .sandbox import Sandbox, mount_args
 
 
 def parse_sbatch_directives(text: str) -> dict[str, str]:
@@ -70,71 +31,196 @@ def parse_sbatch_directives(text: str) -> dict[str, str]:
     return options
 
 
-def validate_job(sandbox: Sandbox, policy: dict[str, object], options: dict[str, str], script_text: str) -> None:
-    limits = _dict(policy, "limits")
-    defaults = _dict(policy, "defaults")
-    allowed_partitions = set(_list(policy, "allowed_partitions"))
-
-    account = options.get("account")
-    if account and account != str(policy.get("account")):
-        raise PolicyError(f"job account {account!r} does not match sandbox account {policy.get('account')!r}")
-
-    partition = options.get("partition") or str(defaults.get("partition", ""))
-    if partition not in allowed_partitions:
-        raise PolicyError(f"partition {partition!r} is not allowed")
-
-    requested_time = options.get("time") or str(defaults.get("time", "00:15:00"))
-    if parse_slurm_time(requested_time) > parse_slurm_time(str(limits.get("max_time", "00:30:00"))):
-        raise PolicyError(f"requested time {requested_time} exceeds max_time {limits.get('max_time')}")
-
-    nodes = int(options.get("nodes") or defaults.get("nodes", 1))
-    if nodes > int(limits.get("max_nodes", 1)):
-        raise PolicyError(f"requested nodes {nodes} exceeds max_nodes {limits.get('max_nodes')}")
-
-    gpus = _requested_gpus(options, defaults)
-    if gpus > int(limits.get("max_gpus_per_node", 0)):
-        raise PolicyError(f"requested GPUs per node {gpus} exceeds max_gpus_per_node {limits.get('max_gpus_per_node')}")
-
-    if "array" in options:
-        raise PolicyError("job arrays are not allowed")
-
-    _reject_obvious_outside_paths(sandbox, script_text)
-
-
-def effective_submit_options(policy: dict[str, object], options: dict[str, str]) -> dict[str, object]:
-    defaults = _dict(policy, "defaults")
+def merge_options(
+    defaults: dict[str, object],
+    directives: dict[str, str],
+    request: dict[str, str] | None = None,
+) -> dict[str, object]:
+    """Explicit request flags beat #SBATCH directives, which beat policy defaults."""
+    request = request or {}
+    gpus = request.get("gpus")
     return {
-        "partition": options.get("partition") or str(defaults.get("partition", "")),
-        "time": options.get("time") or str(defaults.get("time", "00:15:00")),
-        "nodes": int(options.get("nodes") or defaults.get("nodes", 1)),
-        "gpus_per_node": _requested_gpus(options, defaults),
+        "partition": request.get("partition") or directives.get("partition") or str(defaults["partition"]),
+        "time": request.get("time") or directives.get("time") or str(defaults["time"]),
+        "nodes": int(request.get("nodes") or directives.get("nodes") or defaults["nodes"]),  # type: ignore[arg-type]
+        "gpus_per_node": int(gpus) if gpus else _requested_gpus(directives, defaults),
     }
 
 
-def parse_slurm_time(value: str) -> int:
-    original = value
-    has_days = "-" in value
-    days = 0
-    if has_days:
-        day_text, value = value.split("-", 1)
-        days = int(day_text)
+def validate_options(
+    limits: dict[str, object],
+    options: dict[str, object],
+    directives: dict[str, str],
+    account: str,
+) -> None:
+    requested_account = directives.get("account")
+    if requested_account and requested_account != account:
+        raise PolicyError(f"job account {requested_account!r} does not match sandbox account {account!r}")
 
-    parts = [int(part) for part in value.split(":")]
-    if has_days and len(parts) == 1:
-        hours, minutes, seconds = parts[0], 0, 0
-    elif has_days and len(parts) == 2:
-        hours, minutes, seconds = parts[0], parts[1], 0
-    elif has_days and len(parts) == 3:
-        hours, minutes, seconds = parts
-    elif len(parts) == 1:
-        hours, minutes, seconds = 0, parts[0], 0
-    elif len(parts) == 2:
-        hours, minutes, seconds = 0, parts[0], parts[1]
-    elif len(parts) == 3:
-        hours, minutes, seconds = parts
+    allowed = set(str(name) for name in limits["allowed_partitions"])  # type: ignore[union-attr]
+    if options["partition"] not in allowed:
+        raise PolicyError(f"partition {options['partition']!r} is not allowed")
+
+    if parse_slurm_time(str(options["time"])) > parse_slurm_time(str(limits["max_time"])):
+        raise PolicyError(f"requested time {options['time']} exceeds max_time {limits['max_time']}")
+
+    if int(options["nodes"]) > int(limits["max_nodes"]):  # type: ignore[arg-type]
+        raise PolicyError(f"requested nodes {options['nodes']} exceeds max_nodes {limits['max_nodes']}")
+
+    if int(options["gpus_per_node"]) > int(limits["max_gpus_per_node"]):  # type: ignore[arg-type]
+        raise PolicyError(
+            f"requested GPUs per node {options['gpus_per_node']} exceeds "
+            f"max_gpus_per_node {limits['max_gpus_per_node']}"
+        )
+
+    if "array" in directives:
+        raise PolicyError("job arrays are not allowed")
+
+
+def node_hours(options: dict[str, object]) -> float:
+    return int(options["nodes"]) * parse_slurm_time(str(options["time"])) / 3600  # type: ignore[arg-type]
+
+
+def job_wrapper(sandbox: Sandbox, staged: Path, options: dict[str, object], contained: bool) -> str:
+    """The script actually submitted.
+
+    Under `contained` the payload runs inside the agent image with the same
+    mounts the agent had, so $HOME, other projects and the wider /scratch are
+    structurally unreachable rather than filtered out of the script text. The
+    container sees no SLURM_* variables, which is the cost of that isolation.
+
+    The validated directives are written into the script rather than passed as
+    submission flags, because FirecREST's job model has no fields for walltime,
+    nodes or GPUs -- there the script is the only place limits can be stated.
+    """
+    directives = sbatch_directives(sandbox, options)
+    if contained:
+        args = ["singularity", "exec", "--cleanenv", "--containall", "--pwd", "/workspace"]
+        if int(options["gpus_per_node"]) > 0:  # type: ignore[arg-type]
+            args.append("--rocm")
+        args += mount_args(sandbox)
+        args += ["--bind", f"{staged}:/staged/job.sh:ro", sandbox.agent_image, "/bin/sh", "/staged/job.sh"]
+        body = f"exec srun {shlex.join(args)}"
     else:
-        raise PolicyError(f"invalid Slurm time: {original!r}")
-    return days * 86400 + hours * 3600 + minutes * 60 + seconds
+        body = _strip_directives(staged.read_text(encoding="utf-8"))
+    return f"#!/bin/bash\n{directives}\nset -eu\n{body}\n"
+
+
+def sbatch_directives(sandbox: Sandbox, options: dict[str, object]) -> str:
+    logs = sandbox.path / "logs"
+    lines = [
+        f"#SBATCH --account={sandbox.account}",
+        f"#SBATCH --job-name={sandbox.task}",
+        f"#SBATCH --partition={options['partition']}",
+        f"#SBATCH --time={options['time']}",
+        f"#SBATCH --nodes={options['nodes']}",
+        f"#SBATCH --output={logs}/%x-%j.out",
+        f"#SBATCH --error={logs}/%x-%j.err",
+    ]
+    if int(options["gpus_per_node"]) > 0:  # type: ignore[arg-type]
+        lines.append(f"#SBATCH --gpus-per-node={options['gpus_per_node']}")
+    return "\n".join(lines)
+
+
+def _strip_directives(text: str) -> str:
+    """Drop the agent's own #SBATCH lines and shebang.
+
+    They were validated as *input* to work out the effective options; letting
+    them through as well would hand the scheduler a second, unchecked set.
+    """
+    lines = [line for line in text.splitlines() if not line.strip().startswith("#SBATCH")]
+    if lines and lines[0].startswith("#!"):
+        lines = lines[1:]
+    return "\n".join(lines).strip()
+
+
+def submit(
+    site: dict[str, object],
+    sandbox: Sandbox,
+    options: dict[str, object],
+    script: Path,
+    dry_run: bool = False,
+) -> str:
+    """Backend entry point. Mirrored by firecrest.submit; see broker.backend_for."""
+    command = sbatch_command(sandbox, sandbox.account, options, script)
+    if dry_run:
+        return shlex.join(command)
+    return job_id_from(run_sbatch(command, cwd=sandbox.path / "work"))
+
+
+def job_id_from(output: str) -> str:
+    """sbatch prints 'Submitted batch job 12345'."""
+    return output.split()[-1] if output else ""
+
+
+def status(site: dict[str, object], sandbox: Sandbox, job_id: str) -> str:
+    queued = _run(["squeue", "-h", "-j", job_id, "-o", "%T"])
+    if queued:
+        return queued
+    # squeue forgets a job once it leaves the queue; sacct still remembers.
+    finished = _run(["sacct", "-n", "-X", "-j", job_id, "-o", "State"])
+    return finished.split()[0] if finished else "UNKNOWN"
+
+
+def cancel(site: dict[str, object], sandbox: Sandbox, job_id: str) -> str:
+    result = subprocess.run(["scancel", job_id], text=True, capture_output=True, check=False)
+    if result.returncode != 0:
+        raise RuntimeError(result.stderr.strip() or "scancel failed")
+    return "CANCELLED"
+
+
+def _run(command: list[str]) -> str:
+    try:
+        result = subprocess.run(command, text=True, capture_output=True, check=False)
+    except OSError:
+        return ""
+    return result.stdout.strip() if result.returncode == 0 else ""
+
+
+def sbatch_command(sandbox: Sandbox, account: str, options: dict[str, object], script: Path) -> list[str]:
+    logs = sandbox.path / "logs"
+    command = [
+        "sbatch",
+        f"--account={account}",
+        f"--partition={options['partition']}",
+        f"--time={options['time']}",
+        f"--nodes={options['nodes']}",
+        f"--output={logs}/%x-%j.out",
+        f"--error={logs}/%x-%j.err",
+    ]
+    if int(options["gpus_per_node"]) > 0:  # type: ignore[arg-type]
+        command.append(f"--gpus-per-node={options['gpus_per_node']}")
+    command.append(str(script))
+    return command
+
+
+def run_sbatch(command: list[str], cwd: Path) -> str:
+    result = subprocess.run(command, cwd=cwd, text=True, capture_output=True, check=False)
+    if result.returncode != 0:
+        raise RuntimeError(result.stderr.strip() or result.stdout.strip() or "sbatch failed")
+    return result.stdout.strip()
+
+
+def reject_outside_paths(sandbox: Sandbox, script_text: str) -> None:
+    """Advisory text scan, used only when jobs run uncontained on the host.
+
+    This cannot be sound -- /tmp, $SCRATCH or any indirection walks past it.
+    Prefer contained execution, where the boundary is a real one.
+    """
+    if re.search(r"(^|[\s=:])(\$HOME|\$\{HOME\}|~)(/|\s|$)", script_text):
+        raise PolicyError("job script must not reference the user's home directory")
+
+    allowed = sandbox.path.resolve()
+    for match in re.finditer(r"(?<![\w.-])(/(?:scratch|pfs|project|users|home)(?:/[^\s'\";]*)?)", script_text):
+        path = Path(match.group(1))
+        try:
+            path.resolve().relative_to(allowed)
+        except ValueError as exc:
+            raise PolicyError(f"job script references path outside sandbox: {path}") from exc
+
+    for risky in ("rm -rf /", "chmod -R 777 /"):
+        if risky in script_text:
+            raise PolicyError(f"job script contains risky command: {risky}")
 
 
 def _normal_option(key: str) -> str:
@@ -163,36 +249,4 @@ def _requested_gpus(options: dict[str, str], defaults: dict[str, object]) -> int
     match = re.search(r"gpu(?::[^:,]+)?:(\d+)", gres)
     if match:
         return int(match.group(1))
-    return int(defaults.get("gpus_per_node", 0))
-
-
-def _reject_obvious_outside_paths(sandbox: Sandbox, script_text: str) -> None:
-    if re.search(r"(^|[\s=:])(\$HOME|\$\{HOME\}|~)(/|\s|$)", script_text):
-        raise PolicyError("job script must not reference the user's home directory")
-
-    allowed = sandbox.path.resolve()
-    for match in re.finditer(r"(?<![\w.-])(/(?:scratch|pfs|project|users|home)(?:/[^\s'\";]*)?)", script_text):
-        path = Path(match.group(1))
-        try:
-            path.resolve().relative_to(allowed)
-        except ValueError as exc:
-            raise PolicyError(f"job script references path outside sandbox: {path}") from exc
-
-    risky = ("rm -rf /", "chmod -R 777 /")
-    for text in risky:
-        if text in script_text:
-            raise PolicyError(f"job script contains risky command: {text}")
-
-
-def _dict(policy: dict[str, object], key: str) -> dict[str, object]:
-    value = policy.get(key, {})
-    if not isinstance(value, dict):
-        raise PolicyError(f"policy {key!r} must be a mapping")
-    return value
-
-
-def _list(policy: dict[str, object], key: str) -> list[str]:
-    value = policy.get(key, [])
-    if not isinstance(value, list):
-        raise PolicyError(f"policy {key!r} must be a list")
-    return [str(item) for item in value]
+    return int(defaults.get("gpus_per_node", 0))  # type: ignore[arg-type]

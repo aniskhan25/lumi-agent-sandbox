@@ -1,2 +1,45 @@
+# Site policy. Authoritative: a sandbox's own policy.yaml may only narrow these.
 account: project_462000131
 agent_image: /appl/local/laifs/agents/sif/opencode.sif
+
+# standard: today's behaviour, the agent's capabilities are unrestricted.
+# private:  generated OpenCode config, web tools denied, project config disabled.
+profile: standard
+
+# slurm:     the broker calls sbatch on this login node.
+# firecrest: the broker calls the CSC HPC API. Needs FIRECREST_CLIENT_ID and
+#            FIRECREST_CLIENT_SECRET in the broker's environment, never the agent's.
+backend: slurm
+
+# firecrest:
+#   url: https://api.lumi.csc.fi/v1
+#   system: lumi
+#   token_url: https://user-auth.csc.fi/idp/profile/oidc/token
+
+# container: job payloads run inside the agent image with the agent's mounts.
+# host:      payloads run unsandboxed, guarded only by an advisory text scan.
+job_execution: container
+
+# Set true only where outbound traffic is genuinely confined; startup fails
+# otherwise rather than reporting a guarantee that does not hold.
+require_enforced_egress: false
+
+limits:
+  allowed_partitions: [dev-g, debug]
+  max_nodes: 1
+  max_gpus_per_node: 1
+  max_time: "00:30:00"
+  max_jobs_per_session: 10
+  max_node_hours_per_session: 2
+
+# Used only by profile: private. Fill in a real endpoint before switching over.
+# agent:
+#   provider:
+#     id: csc-internal
+#     base_url: https://<csc-inference-endpoint>/v1
+#     models: [<model-id>]
+#   deny_tools: [webfetch, websearch]
+#   mcp:
+#     lumi-docs:
+#       type: local
+#       command: [lumi-docs-mcp]

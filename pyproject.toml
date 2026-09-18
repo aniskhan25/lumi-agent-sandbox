@@ -7,7 +7,7 @@ name = "lumi-agent-sandbox"
 version = "0.1.0"
 description = "Small LUMI task sandbox harness for agent workflows"
 requires-python = ">=3.10"
-dependencies = []
+dependencies = ["PyYAML>=5.1"]
 
 [project.scripts]
 lumi-agent-sandbox = "lumi_agent_sandbox.cli:main"
