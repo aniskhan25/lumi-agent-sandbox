@@ -19,6 +19,7 @@ from . import agentconfig, audit, broker, firecrest
 from .policy import (
     PolicyError,
     effective_limits,
+    container_command,
     egress_enforcement_available,
     profile,
 )
@@ -212,7 +213,7 @@ def _host_checks(sandbox: Sandbox, site: dict[str, object]) -> list[dict[str, ob
         staged.write_text("#!/bin/sh\nhostname\n", encoding="utf-8")
         try:
             options = merge_options({"partition": "dev-g", "time": "00:05:00", "nodes": 1, "gpus_per_node": 0}, {})
-            wrapper = job_wrapper(sandbox, staged, options, contained=True)
+            wrapper = job_wrapper(sandbox, staged, options, True, site)
             binds = [word for word in wrapper.split() if ":" in word and word.startswith("/")]
             outside = [bind for bind in binds if not bind.startswith(str(sandbox.path))]
             checks.append(_check("job_binds_sandbox_only", not outside, f"{len(binds)} binds, all under the sandbox"))
@@ -240,8 +241,9 @@ def _container_checks(sandbox: Sandbox, site: dict[str, object]) -> list[dict[st
         expectations.update(LOCKDOWN_EXPECTATIONS)
 
     names = list(expectations) + ["egress"]
-    if not shutil.which("singularity"):
-        return [_skip(name, "singularity not available on this host") for name in names]
+    runtime = container_command(site)
+    if not shutil.which(runtime):
+        return [_skip(name, f"{runtime} not available on this host") for name in names]
     if not Path(sandbox.agent_image).is_file():
         return [_skip(name, f"agent image not readable: {sandbox.agent_image}") for name in names]
 
@@ -249,7 +251,7 @@ def _container_checks(sandbox: Sandbox, site: dict[str, object]) -> list[dict[st
     if private:
         script += LOCKDOWN_PROBE
 
-    command = ["singularity", "exec", "--cleanenv", "--containall", "--pwd", "/workspace"]
+    command = [runtime, "exec", "--cleanenv", "--containall", "--pwd", "/workspace"]
     command += agent_mount_args(sandbox) + agentconfig.config_mount(sandbox.path, site)
     command += [sandbox.agent_image, "/bin/sh", "-c", script]
     result = subprocess.run(command, text=True, capture_output=True, check=False, env=_probe_env(site))

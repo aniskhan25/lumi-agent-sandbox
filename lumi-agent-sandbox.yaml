@@ -16,6 +16,11 @@ backend: slurm
 #   system: lumi
 #   token_url: https://user-auth.csc.fi/idp/profile/oidc/token
 
+# singularity on LUMI, apptainer on CSC's own systems.
+# --rocm for LUMI's AMD GPUs, --nv for NVIDIA (Roihu is GH200).
+container_command: singularity
+gpu_flag: --rocm
+
 # container: job payloads run inside the agent image with the agent's mounts.
 # host:      payloads run unsandboxed, guarded only by an advisory text scan.
 job_execution: container

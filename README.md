@@ -43,6 +43,8 @@ agent_image: /appl/local/laifs/agents/sif/opencode.sif
 profile: standard
 job_execution: container
 require_enforced_egress: false
+container_command: singularity   # apptainer on CSC's own systems
+gpu_flag: --rocm                 # --nv for NVIDIA
 
 limits:
   allowed_partitions: [dev-g, debug]
@@ -250,6 +252,27 @@ wrapper, where the directives are simply redundant with the command-line flags.
 Implemented on stdlib `urllib`, not `pyfirecrest`: the surface needed is four calls, while the client
 library would take this package from one dependency to roughly fifteen. Reconsider that if bulk data
 staging through S3/Allas is ever needed, which is the fiddly part of the API.
+
+### Testing on Roihu
+
+Roihu is where CSC actually documents FirecREST, and where robot accounts are documented to use it,
+so it is the better place to validate this path first. `site-roihu.yaml` is a worked config; nothing
+in the code changes, because the two deployments serve byte-identical OpenAPI specs apart from
+`servers`.
+
+What differs is all configuration: `https://api.roihu.csc.fi/v1`; system names `cpu` / `gpu` /
+`gpu-login1` rather than a single `lumi`; partitions `test` / `small` / `interactive`; `apptainer`
+instead of `singularity`; and `--nv` instead of `--rocm`, since Roihu is NVIDIA GH200.
+
+It starts at `job_execution: host`, because contained execution needs an OpenCode image on Roihu and
+there is no LAIF equivalent there. The FirecREST client can be validated without one:
+
+```sh
+export FIRECREST_CLIENT_ID=... FIRECREST_CLIENT_SECRET=...
+lumi-agent-sandbox --site-config site-roihu.yaml create smoke
+lumi-agent-sandbox --site-config site-roihu.yaml submit smoke jobs/hostname.sh --dry-run
+lumi-agent-sandbox --site-config site-roihu.yaml submit smoke jobs/hostname.sh
+```
 
 Caveats, both outside this repo:
 

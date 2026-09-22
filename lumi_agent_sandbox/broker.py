@@ -91,7 +91,7 @@ def submit(
     _check_budget(sandbox, limits, options)
 
     wrapper = staged.with_name(f"{request_id}.job.sh")
-    wrapper.write_text(job_wrapper(sandbox, staged, options, contained), encoding="utf-8")
+    wrapper.write_text(job_wrapper(sandbox, staged, options, contained, site), encoding="utf-8")
 
     job_id = backend_for(site).submit(site, sandbox, options, wrapper, dry_run)
     if not dry_run:

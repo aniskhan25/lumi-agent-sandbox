@@ -90,6 +90,17 @@ class SandboxTests(unittest.TestCase):
             self.assertIn(f"{sandbox.path}/input:/input:ro", enter)
             self.assertIn("singularity run", enter)
 
+    def test_sandbox_policy_inherits_site_defaults(self) -> None:
+        site = {**SITE, "defaults": {"partition": "debug", "time": "00:05:00"}}
+        with tempfile.TemporaryDirectory() as tmp:
+            sandbox = sandbox_in(tmp, site)
+            write_job(sandbox, "bare.sh", "#!/bin/sh\nhostname\n")
+
+            command = broker.submit(sandbox, site, {"script": "jobs/bare.sh"}, dry_run=True)
+
+            self.assertIn("--time=00:05:00", command)
+            self.assertIn("--partition=debug", command)
+
     def test_sandbox_policy_may_only_narrow_site_limits(self) -> None:
         loosened = {"limits": {"max_nodes": 8, "max_time": "12:00:00", "allowed_partitions": ["standard-g"]}}
         limits = effective_limits(SITE, loosened)

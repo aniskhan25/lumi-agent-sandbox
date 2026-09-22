@@ -45,6 +45,16 @@ def is_private(site: dict[str, object]) -> bool:
     return profile(site) == "private"
 
 
+def container_command(site: dict[str, object]) -> str:
+    """`singularity` on LUMI, `apptainer` on CSC's own systems."""
+    return str(site.get("container_command", "singularity"))
+
+
+def gpu_flag(site: dict[str, object]) -> str:
+    """`--rocm` for LUMI's AMD GPUs, `--nv` for NVIDIA (Roihu is GH200)."""
+    return str(site.get("gpu_flag", "--rocm"))
+
+
 def egress_enforcement_available() -> bool:
     """Whether outbound network traffic can actually be confined.
 

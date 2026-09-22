@@ -5,7 +5,7 @@ import shlex
 import subprocess
 from pathlib import Path
 
-from .policy import PolicyError, parse_slurm_time
+from .policy import PolicyError, container_command, gpu_flag, parse_slurm_time
 from .sandbox import Sandbox, mount_args
 
 
@@ -81,7 +81,13 @@ def node_hours(options: dict[str, object]) -> float:
     return int(options["nodes"]) * parse_slurm_time(str(options["time"])) / 3600  # type: ignore[arg-type]
 
 
-def job_wrapper(sandbox: Sandbox, staged: Path, options: dict[str, object], contained: bool) -> str:
+def job_wrapper(
+    sandbox: Sandbox,
+    staged: Path,
+    options: dict[str, object],
+    contained: bool,
+    site: dict[str, object] | None = None,
+) -> str:
     """The script actually submitted.
 
     Under `contained` the payload runs inside the agent image with the same
@@ -93,11 +99,12 @@ def job_wrapper(sandbox: Sandbox, staged: Path, options: dict[str, object], cont
     submission flags, because FirecREST's job model has no fields for walltime,
     nodes or GPUs -- there the script is the only place limits can be stated.
     """
+    site = site or {}
     directives = sbatch_directives(sandbox, options)
     if contained:
-        args = ["singularity", "exec", "--cleanenv", "--containall", "--pwd", "/workspace"]
+        args = [container_command(site), "exec", "--cleanenv", "--containall", "--pwd", "/workspace"]
         if int(options["gpus_per_node"]) > 0:  # type: ignore[arg-type]
-            args.append("--rocm")
+            args.append(gpu_flag(site))
         args += mount_args(sandbox)
         args += ["--bind", f"{staged}:/staged/job.sh:ro", sandbox.agent_image, "/bin/sh", "/staged/job.sh"]
         body = f"exec srun {shlex.join(args)}"

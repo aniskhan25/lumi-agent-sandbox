@@ -1,0 +1,33 @@
+# Site policy for CSC Roihu, for exercising the FirecREST backend.
+# Same code as LUMI: only this file differs. Fill in your project id.
+account: project_2XXXXXX
+agent_image: /projappl/project_2XXXXXX/opencode.sif
+
+backend: firecrest
+firecrest:
+  url: https://api.roihu.csc.fi/v1
+  system: cpu                # roihu splits into cpu / gpu / gpu-login1
+  token_url: https://user-auth.csc.fi/idp/profile/oidc/token
+
+# Roihu is NVIDIA GH200 and CSC ships apptainer; LUMI is AMD and singularity.
+container_command: apptainer
+gpu_flag: --nv
+
+profile: standard
+# host until an OpenCode image exists on Roihu; the FirecREST client can be
+# validated without one, since contained execution is what needs the image.
+job_execution: host
+
+limits:
+  allowed_partitions: [test, small, interactive]
+  max_nodes: 1
+  max_gpus_per_node: 0
+  max_time: "00:15:00"
+  max_jobs_per_session: 10
+  max_node_hours_per_session: 1
+
+defaults:
+  partition: test
+  time: "00:05:00"
+  nodes: 1
+  gpus_per_node: 0

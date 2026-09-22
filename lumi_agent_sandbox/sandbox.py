@@ -14,7 +14,7 @@ from pathlib import Path
 import yaml
 
 from . import agentconfig
-from .policy import CONFIG_FILE, DEFAULT_JOB_OPTIONS, read_yaml
+from .policy import CONFIG_FILE, container_command, job_defaults, read_yaml
 
 
 TASK_RE = re.compile(r"[^a-zA-Z0-9._-]+")
@@ -79,7 +79,7 @@ def create_sandbox(
     for child in SANDBOX_DIRS:
         (sandbox.path / child).mkdir(parents=True, exist_ok=True)
 
-    _write_policy(sandbox)
+    _write_policy(sandbox, site)
     agentconfig.write_config(sandbox.path, site)
     write_enter_script(sandbox, site)
     _write_command_wrappers(sandbox)
@@ -195,11 +195,13 @@ def archive_audit(sandbox: Sandbox) -> Path | None:
     return destination
 
 
-def _write_policy(sandbox: Sandbox) -> None:
+def _write_policy(sandbox: Sandbox, site: dict[str, object]) -> None:
     data = {
         "account": sandbox.account,
         "agent_image": sandbox.agent_image,
-        "defaults": dict(DEFAULT_JOB_OPTIONS),
+        # The site's defaults, not the built-in ones: writing the constants here
+        # would silently override whatever the site configured.
+        "defaults": job_defaults(site, {}),
     }
     header = (
         "# Per-sandbox policy.\n"
@@ -216,6 +218,7 @@ def write_enter_script(sandbox: Sandbox, site: dict[str, object] | None = None) 
     environment = {"SINGULARITYENV_PREPEND_PATH": "/safe-bin"}
     environment.update({f"SINGULARITYENV_{k}": v for k, v in agentconfig.container_env(site).items()})
     exports = " \\\n  ".join(f"{key}={shlex.quote(value)}" for key, value in environment.items())
+    runtime = container_command(site)
     script = f"""#!/bin/sh
 set -eu
 
@@ -229,7 +232,7 @@ fi
 
 exec env \\
   {exports} \\
-  singularity run \\
+  {runtime} run \\
   --cleanenv \\
   --containall \\
   --pwd /workspace \\
