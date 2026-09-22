@@ -1,7 +1,7 @@
 # Site policy for CSC Roihu, for exercising the FirecREST backend.
 # Same code as LUMI: only this file differs. Fill in your project id.
-account: project_2XXXXXX
-agent_image: /projappl/project_2XXXXXX/opencode.sif
+account: project_2014553
+agent_image: /projappl/project_2014553/opencode.sif
 
 backend: firecrest
 firecrest:
