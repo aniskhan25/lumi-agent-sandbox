@@ -249,6 +249,10 @@ export FIRECREST_TOKEN=eyJ...
 `--cleanenv --containall` means the agent's container sees neither. Never put either in a site
 config file — those are committed to this repo.
 
+The client uses stdlib `urllib`, which needs the Python install to have a CA bundle. If it does
+not, calls fail with `CERTIFICATE_VERIFY_FAILED` even though the service is fine; install `certifi`
+or set `SSL_CERT_FILE`. The error names this case rather than reporting the host as unreachable.
+
 A personal token cannot be refreshed, so it simply starts returning 401 after 24 hours; the client
 says so rather than reporting a bare authentication failure. `inspect` reports which form is in use,
 never the value. Robot accounts are not self-service — mail servicedesk@csc.fi.

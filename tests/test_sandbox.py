@@ -433,6 +433,16 @@ class FirecrestTests(unittest.TestCase):
                     with self.assertRaisesRegex(RuntimeError, "may have expired"):
                         firecrest.status(FIRECREST_SITE, sandbox, "1")
 
+    def test_a_missing_ca_bundle_is_named_as_such(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            sandbox = sandbox_in(tmp, FIRECREST_SITE)
+            firecrest._TOKENS.clear()
+            failure = urllib.error.URLError("[SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed")
+            with mock.patch.dict(os.environ, {"FIRECREST_TOKEN": "jwt"}, clear=True):
+                with mock.patch("urllib.request.urlopen", side_effect=failure):
+                    with self.assertRaisesRegex(RuntimeError, "no usable CA bundle"):
+                        firecrest.status(FIRECREST_SITE, sandbox, "1")
+
     def test_dry_run_makes_no_http_call(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             sandbox = sandbox_in(tmp, FIRECREST_SITE)

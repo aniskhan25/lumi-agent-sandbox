@@ -206,7 +206,15 @@ def _request(
     except urllib.error.HTTPError as exc:
         raise _error(exc) from None
     except urllib.error.URLError as exc:
-        raise RuntimeError(f"FirecREST unreachable: {exc.reason}") from None
+        reason = str(exc.reason)
+        if "CERTIFICATE_VERIFY_FAILED" in reason:
+            # The host is reachable; this Python just has no CA bundle, which is
+            # easy to misread as the service being down.
+            raise RuntimeError(
+                f"TLS verification failed for {url}: {reason}. "
+                "This Python has no usable CA bundle -- install certifi or set SSL_CERT_FILE."
+            ) from None
+        raise RuntimeError(f"FirecREST unreachable: {reason}") from None
 
 
 def _error(exc: urllib.error.HTTPError) -> FirecrestError:
