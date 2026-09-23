@@ -235,13 +235,23 @@ firecrest:
   token_url: https://user-auth.csc.fi/idp/profile/oidc/token
 ```
 
-Credentials come from `FIRECREST_CLIENT_ID` and `FIRECREST_CLIENT_SECRET` in the **broker's**
-environment. The token is fetched with the OAuth2 client-credentials grant, cached in memory for its
-`expires_in`, and never written to disk or into the sandbox — `--cleanenv --containall` means the
-agent's container cannot see either the credentials or the token.
+Credentials live in the **broker's** environment and nowhere else. Two forms:
 
-Get a robot account by mailing servicedesk@csc.fi; it is not self-service. For personal use there are
-24-hour tokens at https://my.csc.fi/firecrest-token.
+```sh
+# robot account: exchanged for a token and refreshed automatically
+export FIRECREST_CLIENT_ID=... FIRECREST_CLIENT_SECRET=...
+
+# or a personal 24-hour token from https://my.csc.fi/firecrest-token, used as-is
+export FIRECREST_TOKEN=eyJ...
+```
+
+`FIRECREST_TOKEN` wins if both are set. Nothing is written to disk or into the sandbox, and
+`--cleanenv --containall` means the agent's container sees neither. Never put either in a site
+config file — those are committed to this repo.
+
+A personal token cannot be refreshed, so it simply starts returning 401 after 24 hours; the client
+says so rather than reporting a bare authentication failure. `inspect` reports which form is in use,
+never the value. Robot accounts are not self-service — mail servicedesk@csc.fi.
 
 One thing worth knowing about the API: `JobDescriptionModel` has **no fields for walltime, nodes or
 GPUs**. Those can only be expressed as `#SBATCH` directives in the script. So the broker writes the

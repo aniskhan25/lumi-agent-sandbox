@@ -413,6 +413,26 @@ class FirecrestTests(unittest.TestCase):
             self.assertNotIn("shh", written)
             self.assertNotIn("test-token", written)
 
+    def test_a_personal_token_is_used_directly(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            sandbox = sandbox_in(tmp, FIRECREST_SITE)
+            firecrest._TOKENS.clear()
+
+            with mock.patch.dict(os.environ, {"FIRECREST_TOKEN": "personal-jwt"}, clear=True):
+                with mock.patch("urllib.request.urlopen") as urlopen:
+                    urlopen.return_value = FakeResponse({"jobs": [{"status": {"state": "RUNNING"}}]})
+                    self.assertEqual(firecrest.status(FIRECREST_SITE, sandbox, "1"), "RUNNING")
+
+                # No token exchange: the JWT is used as-is.
+                self.assertEqual(urlopen.call_count, 1)
+                self.assertEqual(urlopen.call_args[0][0].headers["Authorization"], "Bearer personal-jwt")
+                self.assertIn("FIRECREST_TOKEN", firecrest.credential_source())
+
+                # A 24h token dies silently, so say so rather than just "401".
+                with mock.patch("urllib.request.urlopen", side_effect=http_error(401, "Not authenticated")):
+                    with self.assertRaisesRegex(RuntimeError, "may have expired"):
+                        firecrest.status(FIRECREST_SITE, sandbox, "1")
+
     def test_dry_run_makes_no_http_call(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             sandbox = sandbox_in(tmp, FIRECREST_SITE)

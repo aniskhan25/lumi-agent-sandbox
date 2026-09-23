@@ -33,6 +33,7 @@ DEFAULT_SYSTEM = "lumi"
 DEFAULT_TOKEN_URL = "https://user-auth.csc.fi/idp/profile/oidc/token"
 CLIENT_ID_ENV = "FIRECREST_CLIENT_ID"
 CLIENT_SECRET_ENV = "FIRECREST_CLIENT_SECRET"
+TOKEN_ENV = "FIRECREST_TOKEN"
 
 HTTP_TIMEOUT = 30
 TOKEN_MARGIN = 30
@@ -132,16 +133,36 @@ def _call(config: dict[str, str], method: str, url: str, body: dict[str, object]
     if body is not None:
         data = json.dumps(body).encode()
         headers["Content-Type"] = "application/json"
-    return _request(url, data=data, headers=headers, method=method)
+    try:
+        return _request(url, data=data, headers=headers, method=method)
+    except FirecrestError as exc:
+        if exc.status == 401 and os.environ.get(TOKEN_ENV, "").strip():
+            raise FirecrestError(exc.status, f"{exc.message} ({TOKEN_ENV} may have expired)") from None
+        raise
+
+
+def credential_source() -> str:
+    """Which credential the broker would use, for `inspect` to report. Never the value."""
+    if os.environ.get(TOKEN_ENV, "").strip():
+        return f"${TOKEN_ENV} (fixed token, expires without warning)"
+    if os.environ.get(CLIENT_ID_ENV) and os.environ.get(CLIENT_SECRET_ENV):
+        return f"${CLIENT_ID_ENV}/${CLIENT_SECRET_ENV} (refreshed automatically)"
+    return "none set"
 
 
 def _token(config: dict[str, str]) -> str:
+    # A personal token from my.csc.fi is already a bearer JWT: there is nothing
+    # to exchange, and nothing to refresh once it expires.
+    direct = os.environ.get(TOKEN_ENV, "").strip()
+    if direct:
+        return direct
+
     client_id = os.environ.get(CLIENT_ID_ENV, "")
     client_secret = os.environ.get(CLIENT_SECRET_ENV, "")
     if not client_id or not client_secret:
         raise PolicyError(
-            f"set {CLIENT_ID_ENV} and {CLIENT_SECRET_ENV} in the broker's environment; "
-            "the agent container never sees them"
+            f"set {CLIENT_ID_ENV} and {CLIENT_SECRET_ENV}, or {TOKEN_ENV} for a personal token, "
+            "in the broker environment; the agent container never sees them"
         )
 
     key = (config["token_url"], client_id)

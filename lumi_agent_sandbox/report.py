@@ -99,6 +99,7 @@ def inspect(sandbox: Sandbox, site: dict[str, object], site_path: Path | None = 
         "Execution",
         f"  backend      {_backend(site)}",
         f"  job payload  {'runs inside the agent image' if contained else 'runs on the host, unsandboxed'}",
+        f"  credential   {_credential(site)}",
         "  agent holds an HPC credential   no",
         "",
         "Agent",
@@ -304,6 +305,12 @@ def _backend(site: dict[str, object]) -> str:
     url = config.get("url", firecrest.DEFAULT_URL) if isinstance(config, dict) else firecrest.DEFAULT_URL
     system = config.get("system", firecrest.DEFAULT_SYSTEM) if isinstance(config, dict) else firecrest.DEFAULT_SYSTEM
     return f"FirecREST {url} ({system})"
+
+
+def _credential(site: dict[str, object]) -> str:
+    if str(site.get("backend", "slurm")) != "firecrest":
+        return "none needed for local sbatch"
+    return firecrest.credential_source()
 
 
 def _trust(path: Path | None) -> str:
