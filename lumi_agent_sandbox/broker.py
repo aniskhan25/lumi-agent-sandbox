@@ -11,7 +11,7 @@ from pathlib import Path
 import yaml
 
 from . import firecrest, slurm
-from .policy import PolicyError, effective_limits, job_defaults
+from .policy import PolicyError, agent_execution, agent_node_hours, effective_limits, job_defaults
 from .sandbox import Sandbox, sandbox_policy
 from .slurm import (
     job_wrapper,
@@ -178,6 +178,24 @@ def _own_job(sandbox: Sandbox, job_id: str) -> None:
         raise PolicyError(f"job {job_id} was not submitted from this sandbox")
 
 
+def record_agent_session(sandbox: Sandbox, site: dict[str, object]) -> None:
+    """Charge the agent's own allocation to the session budget.
+
+    Without this the budget only governs submitted jobs, and an agent sitting in
+    a long allocation burns units nothing is counting.
+    """
+    if agent_execution(site) != "compute":
+        return
+    entry = {
+        "kind": "agent_session",
+        "started_at": _now(),
+        "node_hours": agent_node_hours(site),
+    }
+    path = sandbox.path / "audit" / "jobs.jsonl"
+    with path.open("a", encoding="utf-8") as handle:
+        handle.write(json.dumps(entry) + "\n")
+
+
 def _stage(sandbox: Sandbox, request_id: str, script: Path) -> Path:
     staged_dir = sandbox.path / "audit" / "submitted"
     staged_dir.mkdir(parents=True, exist_ok=True)
@@ -189,7 +207,8 @@ def _stage(sandbox: Sandbox, request_id: str, script: Path) -> Path:
 def _check_budget(sandbox: Sandbox, limits: dict[str, object], options: dict[str, object]) -> None:
     history = _history(sandbox)
     max_jobs = int(limits["max_jobs_per_session"])  # type: ignore[arg-type]
-    if len(history) >= max_jobs:
+    jobs = [entry for entry in history if entry.get("kind") != "agent_session"]
+    if len(jobs) >= max_jobs:
         raise PolicyError(f"session limit of {max_jobs} jobs reached")
 
     budget = float(limits["max_node_hours_per_session"])  # type: ignore[arg-type]

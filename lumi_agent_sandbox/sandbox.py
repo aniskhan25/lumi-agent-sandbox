@@ -14,7 +14,14 @@ from pathlib import Path
 import yaml
 
 from . import agentconfig
-from .policy import CONFIG_FILE, container_command, job_defaults, read_yaml
+from .policy import (
+    CONFIG_FILE,
+    agent_allocation,
+    agent_execution,
+    container_command,
+    job_defaults,
+    read_yaml,
+)
 
 
 TASK_RE = re.compile(r"[^a-zA-Z0-9._-]+")
@@ -219,6 +226,7 @@ def write_enter_script(sandbox: Sandbox, site: dict[str, object] | None = None) 
     environment.update({f"SINGULARITYENV_{k}": v for k, v in agentconfig.container_env(site).items()})
     exports = " \\\n  ".join(f"{key}={shlex.quote(value)}" for key, value in environment.items())
     runtime = container_command(site)
+    launcher = _allocation_prefix(sandbox, site)
     script = f"""#!/bin/sh
 set -eu
 
@@ -230,7 +238,7 @@ if [ ! -r "$AGENT_IMAGE" ]; then
   exit 2
 fi
 
-exec env \\
+exec {launcher}env \\
   {exports} \\
   {runtime} run \\
   --cleanenv \\
@@ -254,6 +262,31 @@ exit 2
     for name in ("sbatch", "srun", "salloc"):
         _write_wrapper(sandbox, name, blocked)
     _write_wrapper(sandbox, "lumi-job", LUMI_JOB)
+
+
+def _allocation_prefix(sandbox: Sandbox, site: dict[str, object]) -> str:
+    """Run the agent inside a Slurm allocation rather than on the login node.
+
+    The broker stays behind on the login node: it is a one-second poll loop that
+    reads a small file and shells out to sbatch, which is exactly what login
+    nodes are for, and it is where the credential belongs.
+    """
+    if agent_execution(site) != "compute":
+        return ""
+    allocation = agent_allocation(site)
+    args = [
+        "srun",
+        f"--account={sandbox.account}",
+        f"--partition={allocation['partition']}",
+        f"--time={allocation['time']}",
+        f"--nodes={allocation['nodes']}",
+        f"--cpus-per-task={allocation['cpus']}",
+        f"--job-name={sandbox.task}-agent",
+    ]
+    if allocation.get("memory"):
+        args.append(f"--mem={allocation['memory']}")
+    args.append("--pty")
+    return " ".join(args) + " \\\n  "
 
 
 def _shell_args(args: list[str]) -> str:

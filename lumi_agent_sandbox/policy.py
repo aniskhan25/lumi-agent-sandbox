@@ -28,6 +28,14 @@ DEFAULT_JOB_OPTIONS: dict[str, object] = {
 
 
 PROFILES = ("standard", "private")
+AGENT_EXECUTIONS = ("compute", "login")
+
+DEFAULT_AGENT_ALLOCATION: dict[str, object] = {
+    "partition": "small",
+    "time": "02:00:00",
+    "nodes": 1,
+    "cpus": 8,
+}
 
 
 class PolicyError(ValueError):
@@ -43,6 +51,42 @@ def profile(site: dict[str, object]) -> str:
 
 def is_private(site: dict[str, object]) -> bool:
     return profile(site) == "private"
+
+
+def agent_execution(site: dict[str, object]) -> str:
+    """Where the agent itself runs: a compute allocation, or the login node.
+
+    Defaults to `compute`. An agent edits files, greps and builds, which is
+    exactly the work login nodes are not for, and it is far too easy to do by
+    accident because the agent has no idea where it is running.
+    """
+    where = str(site.get("agent_execution", "compute"))
+    if where not in AGENT_EXECUTIONS:
+        raise PolicyError(f"unknown agent_execution {where!r}, expected one of {', '.join(AGENT_EXECUTIONS)}")
+    return where
+
+
+def agent_allocation(site: dict[str, object]) -> dict[str, object]:
+    """Resources for the agent's own session. Deliberately CPU-only.
+
+    An agent spends its time reading files and waiting on a model, so a GPU
+    allocation bills accelerator rates for an idle device. The GPUs belong to
+    the jobs it submits, which the broker allocates separately.
+    """
+    allocation = dict(DEFAULT_AGENT_ALLOCATION)
+    allocation.update(_mapping(site, "agent_allocation"))
+    allocation["time"] = slurm_time(allocation["time"])
+    if int(allocation.get("gpus_per_node", 0) or 0) > 0:
+        raise PolicyError(
+            "agent_allocation must not request GPUs: the agent waits on a model and reads files, "
+            "so the GPU would idle at accelerator rates. Let the jobs it submits use them instead."
+        )
+    return allocation
+
+
+def agent_node_hours(site: dict[str, object]) -> float:
+    allocation = agent_allocation(site)
+    return int(allocation["nodes"]) * parse_slurm_time(str(allocation["time"])) / 3600  # type: ignore[arg-type]
 
 
 def container_command(site: dict[str, object]) -> str:

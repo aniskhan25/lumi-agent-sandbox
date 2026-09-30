@@ -42,6 +42,7 @@ account: project_462000131
 agent_image: /appl/local/laifs/agents/sif/opencode.sif
 profile: standard
 job_execution: container
+agent_execution: compute         # login for smoke tests only
 require_enforced_egress: false
 container_command: singularity   # apptainer on CSC's own systems
 gpu_flag: --rocm                 # --nv for NVIDIA
@@ -122,7 +123,19 @@ cat "$SANDBOX"/logs/*.out
 lumi-agent-sandbox enter smoke-test
 ```
 
-`enter` starts the broker and opens the OpenCode UI. Type prompts in that UI, not in the shell.
+`enter` starts the broker on the login node and runs the agent itself inside a Slurm allocation,
+then opens the OpenCode UI. Type prompts in that UI, not in the shell.
+
+The split matters. An agent edits, greps and builds, which is exactly what login nodes are not for,
+and it has no idea where it is running. The broker stays behind because it is a one-second poll loop
+that reads a small file and shells out to `sbatch` — light supervisory work, and where the credential
+belongs. The agent's allocation is **CPU-only by design**: it waits on a model and reads files, so a
+GPU would idle at accelerator rates. `agent_allocation` refuses to request one; the GPUs belong to
+the jobs it submits. That allocation is charged to `max_node_hours_per_session` like any other, so a
+long session cannot quietly outspend the budget.
+
+`agent_execution: login` runs it on the login node instead. That is for smoke tests; `inspect` says
+so in capitals and `verify` lists it under what is not enforced.
 A test prompt:
 
 ```text

@@ -12,6 +12,7 @@ from lumi_agent_sandbox import agentconfig, audit, broker, firecrest, report
 from lumi_agent_sandbox.cli import main
 from lumi_agent_sandbox.policy import (
     PolicyError,
+    agent_allocation,
     effective_limits,
     parse_slurm_time,
     read_yaml,
@@ -19,6 +20,7 @@ from lumi_agent_sandbox.policy import (
 )
 from lumi_agent_sandbox.sandbox import (
     agent_mount_args,
+    create_sandbox,
     create_sandbox,
     destroy_sandbox,
     mount_args,
@@ -89,6 +91,43 @@ class SandboxTests(unittest.TestCase):
             enter = (sandbox.path / "enter.sh").read_text(encoding="utf-8")
             self.assertIn(f"{sandbox.path}/input:/input:ro", enter)
             self.assertIn("singularity run", enter)
+
+    def test_agent_runs_in_a_cpu_allocation_by_default(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            sandbox = sandbox_in(tmp, SITE)
+            enter = (sandbox.path / "enter.sh").read_text(encoding="utf-8")
+
+            self.assertIn("srun --account=project_123", enter)
+            self.assertIn("--partition=small", enter)
+            self.assertIn("--cpus-per-task=8", enter)
+            self.assertIn("--pty", enter)
+            self.assertNotIn("--gpus", enter)
+
+            # login is still available, and inspect must say so loudly.
+            login = {**SITE, "agent_execution": "login"}
+            sandbox = create_sandbox("onlogin", Path(tmp), "project_123", "/agent.sif", login)
+            self.assertNotIn("srun", (sandbox.path / "enter.sh").read_text(encoding="utf-8"))
+            self.assertIn("ON THE LOGIN NODE", report.inspect(sandbox, login))
+            self.assertIn("break LUMI usage policy", " ".join(report.warnings(login, None, True, False)))
+
+    def test_agent_allocation_refuses_gpus(self) -> None:
+        with self.assertRaisesRegex(PolicyError, "must not request GPUs"):
+            agent_allocation({"agent_allocation": {"gpus_per_node": 1}})
+
+    def test_agent_session_counts_against_the_budget(self) -> None:
+        site = {**SITE, "agent_allocation": {"partition": "small", "time": "01:00:00", "nodes": 1, "cpus": 8}}
+        with tempfile.TemporaryDirectory() as tmp:
+            sandbox = sandbox_in(tmp, site)
+            write_job(sandbox, "ok.sh", "#!/bin/sh\n#SBATCH --partition=dev-g\n#SBATCH --time=00:30:00\nhostname\n")
+
+            broker.record_agent_session(sandbox, site)
+
+            # Budget is 1 node-hour; the agent's own allocation already spent it.
+            with self.assertRaisesRegex(PolicyError, "budget exceeded"):
+                broker.submit(sandbox, site, {"script": "jobs/ok.sh"}, dry_run=True)
+
+            # ...but it must not eat into the job *count*.
+            self.assertEqual(len(broker._history(sandbox)), 1)
 
     def test_sandbox_policy_inherits_site_defaults(self) -> None:
         site = {**SITE, "defaults": {"partition": "debug", "time": "00:05:00"}}

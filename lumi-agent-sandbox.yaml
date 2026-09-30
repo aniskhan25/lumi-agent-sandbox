@@ -16,6 +16,18 @@ backend: slurm
 #   system: lumi
 #   token_url: https://user-auth.csc.fi/idp/profile/oidc/token
 
+# compute: the agent runs in a Slurm allocation (the broker stays on the login
+#          node, where a 1s poll loop belongs). login: smoke tests only.
+agent_execution: compute
+
+# CPU only, deliberately: the agent waits on a model and reads files, so a GPU
+# would idle at accelerator rates. The jobs it submits get the GPUs.
+agent_allocation:
+  partition: small
+  time: "02:00:00"
+  nodes: 1
+  cpus: 8
+
 # singularity on LUMI, apptainer on CSC's own systems.
 # --rocm for LUMI's AMD GPUs, --nv for NVIDIA (Roihu is GH200).
 container_command: singularity

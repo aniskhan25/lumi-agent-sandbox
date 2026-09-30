@@ -84,6 +84,7 @@ def main(argv: list[str] | None = None) -> int:
 
         if args.command == "enter":
             serve = None if args.no_broker else (lambda: broker.serve(sandbox, site))
+            broker.record_agent_session(sandbox, site)
             return enter_sandbox(sandbox, site, serve)
 
         if args.command == "broker":

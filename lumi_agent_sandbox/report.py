@@ -19,6 +19,8 @@ from . import agentconfig, audit, broker, firecrest
 from .policy import (
     PolicyError,
     effective_limits,
+    agent_allocation,
+    agent_execution,
     container_command,
     egress_enforcement_available,
     profile,
@@ -99,6 +101,7 @@ def inspect(sandbox: Sandbox, site: dict[str, object], site_path: Path | None = 
         "Execution",
         f"  backend      {_backend(site)}",
         f"  job payload  {'runs inside the agent image' if contained else 'runs on the host, unsandboxed'}",
+        f"  agent runs   {_agent_placement(site)}",
         f"  credential   {_credential(site)}",
         "  agent holds an HPC credential   no",
         "",
@@ -139,6 +142,11 @@ def warnings(site: dict[str, object], site_path: Path | None, contained: bool, p
         )
     else:
         notes.append("Standard profile: the agent's model providers, web tools and MCP servers are unrestricted.")
+    if str(site.get("agent_execution", "compute")) == "login":
+        notes.append(
+            "The agent runs on the login node, where its edits, greps and builds break LUMI usage "
+            "policy. Use agent_execution: compute for anything beyond a smoke test."
+        )
     if not contained:
         notes.append(
             "Job payloads run on the host. The only boundary is an advisory text scan, which any "
@@ -305,6 +313,13 @@ def _backend(site: dict[str, object]) -> str:
     url = config.get("url", firecrest.DEFAULT_URL) if isinstance(config, dict) else firecrest.DEFAULT_URL
     system = config.get("system", firecrest.DEFAULT_SYSTEM) if isinstance(config, dict) else firecrest.DEFAULT_SYSTEM
     return f"FirecREST {url} ({system})"
+
+
+def _agent_placement(site: dict[str, object]) -> str:
+    if agent_execution(site) != "compute":
+        return "ON THE LOGIN NODE (fine for a smoke test, not for real work)"
+    a = agent_allocation(site)
+    return f"in a {a['partition']} allocation, {a['cpus']} CPUs, {a['time']}, no GPU"
 
 
 def _credential(site: dict[str, object]) -> str:
