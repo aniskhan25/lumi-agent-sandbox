@@ -2,6 +2,8 @@
 
 Small host-side harness for running OpenCode on LUMI inside a disposable task workspace.
 
+Step-by-step commands live in [RUNBOOK.md](RUNBOOK.md).
+
 It creates one sandbox directory per task, starts the LAIF OpenCode SIF with strict mounts, and lets
 the agent submit Slurm jobs through a host-side broker that holds the credentials and enforces the
 site's resource limits.
@@ -71,15 +73,21 @@ The default sandbox root is:
 
 ## Install On LUMI
 
+`RUNBOOK.md` has the copy-paste version of this and everything below it, plus the failures worth
+recognising. In short:
+
 ```sh
 PROJECT=project_462000131
 
 cd /scratch/$PROJECT/$USER
 git clone https://github.com/aniskhan25/lumi-agent-sandbox.git
 cd lumi-agent-sandbox
-module load cray-python
-python3 -m pip install --user -e .
+module load cray-python          # the default python3 is 3.6 and too old
+python3 -c "import yaml" || python3 -m pip install --user PyYAML
 ```
+
+Nothing needs installing: `python3 -m lumi_agent_sandbox` runs from the repo. `pip install --user -e .`
+works under `cray-python` if you prefer the shorter command.
 
 ## Smoke Test
 
