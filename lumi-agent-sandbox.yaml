@@ -47,7 +47,8 @@ limits:
   max_gpus_per_node: 1
   max_time: "00:30:00"
   max_jobs_per_session: 10
-  max_node_hours_per_session: 2
+  # The agent's own allocation counts here too, so leave room for it.
+  max_node_hours_per_session: 10
 
 # Used only by profile: private. Fill in a real endpoint before switching over.
 # agent:

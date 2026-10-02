@@ -6,11 +6,16 @@ OpenCode merges config from several places and *later wins*: global config, then
 restricts nothing -- and `.opencode/plugin*/*.ts` is auto-discovered and executed,
 which no config key closes.
 
-So the lockdown is three things together: a read-only config bound into the
-managed config directory, which outranks project config; the undocumented
-OPENCODE_DISABLE_PROJECT_CONFIG, which is the only thing that stops project
-config and the plugin directory from being read at all; and OPENCODE_PERMISSION,
-which is applied last of all. Verified against opencode v1.18.31.
+Everything here therefore travels as environment, not as a file. A session log
+from the LAIF image (opencode 1.18.32) shows it reading its config from
+/home/agent/.config/opencode/ and /opt/opencode/config/ and never consulting
+/etc/opencode, so binding a file into the documented managed directory is not
+dependable across images. `OPENCODE_CONFIG_CONTENT` is applied after project
+config and `OPENCODE_PERMISSION` after everything, and neither depends on a path.
+
+This applies to both profiles, because it is not a privacy measure. The image
+ships a `"*": "ask"` rule, so without it every command the agent runs stops for a
+human -- which adds no control the container is not already enforcing.
 """
 
 from __future__ import annotations
@@ -46,7 +51,7 @@ def agent_policy(site: dict[str, object]) -> dict[str, object]:
 
 
 def denied_tools(site: dict[str, object]) -> list[str]:
-    configured = agent_policy(site).get("deny_tools", list(DENIED_TOOLS))
+    configured = agent_policy(site).get("deny_tools", list(DENIED_TOOLS) if is_private(site) else [])
     if not isinstance(configured, list):
         raise PolicyError("site 'agent.deny_tools' must be a list")
     return [str(tool) for tool in configured]
@@ -59,6 +64,7 @@ def permissions(site: dict[str, object]) -> dict[str, str]:
     everything else at its default of asking.
     """
     allowed = {tool: "allow" for tool in CONTAINED_TOOLS}
+    allowed.update({tool: "allow" for tool in DENIED_TOOLS})
     denied = {tool: "deny" for tool in list(denied_tools(site)) + list(ESCAPE_TOOLS)}
     override = agent_policy(site).get("permission", {})
     if not isinstance(override, dict):
@@ -91,9 +97,8 @@ def opencode_config(site: dict[str, object]) -> dict[str, object]:
     return config
 
 
-def write_config(sandbox_path: Path, site: dict[str, object]) -> Path | None:
-    if not is_private(site):
-        return None
+def write_config(sandbox_path: Path, site: dict[str, object]) -> Path:
+    """Write the effective config out as evidence; it is delivered by env, not read from here."""
     path = sandbox_path / "agent" / "opencode.json"
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(opencode_config(site), indent=2) + "\n", encoding="utf-8")
@@ -102,20 +107,20 @@ def write_config(sandbox_path: Path, site: dict[str, object]) -> Path | None:
 
 def container_env(site: dict[str, object]) -> dict[str, str]:
     """Environment that outranks anything the agent can write into /workspace."""
-    if not is_private(site):
-        return {}
     return {
+        # The only thing that stops project config and .opencode/plugin from being read.
         "OPENCODE_DISABLE_PROJECT_CONFIG": "1",
         "OPENCODE_DISABLE_MODELS_FETCH": "1",
+        # Beats project config; no path to get wrong.
+        "OPENCODE_CONFIG_CONTENT": json.dumps(opencode_config(site)),
         # Applied last of all, so it carries the whole block.
         "OPENCODE_PERMISSION": json.dumps(permissions(site)),
     }
 
 
 def config_mount(sandbox_path: Path, site: dict[str, object]) -> list[str]:
-    if not is_private(site):
-        return []
-    return ["--bind", f"{sandbox_path}/agent/opencode.json:{MANAGED_CONFIG}:ro"]
+    """No mount: /etc/opencode is not read by every build, so config travels as env."""
+    return []
 
 
 def _mcp(agent: dict[str, object]) -> dict[str, object]:

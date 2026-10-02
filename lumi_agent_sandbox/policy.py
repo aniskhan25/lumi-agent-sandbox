@@ -16,7 +16,9 @@ DEFAULT_LIMITS: dict[str, object] = {
     "max_gpus_per_node": 1,
     "max_time": "00:30:00",
     "max_jobs_per_session": 10,
-    "max_node_hours_per_session": 2,
+    # Generous on purpose: the agent's own allocation is charged here too, so
+    # a tight budget is spent before it submits anything.
+    "max_node_hours_per_session": 10,
 }
 
 DEFAULT_JOB_OPTIONS: dict[str, object] = {

@@ -568,15 +568,22 @@ class CapabilityTests(unittest.TestCase):
             written = sandbox.path / "agent" / "opencode.json"
             self.assertTrue(written.is_file())
             enter = (sandbox.path / "enter.sh").read_text(encoding="utf-8")
-            self.assertIn(f"{written}:/etc/opencode/opencode.json:ro", enter)
+            # Config travels as environment: the LAIF image never reads /etc/opencode.
             self.assertIn("SINGULARITYENV_OPENCODE_DISABLE_PROJECT_CONFIG=1", enter)
+            self.assertIn("SINGULARITYENV_OPENCODE_CONFIG_CONTENT=", enter)
+            self.assertNotIn("/etc/opencode", enter)
 
-    def test_standard_profile_restricts_nothing(self) -> None:
+    def test_standard_profile_still_silences_the_prompts(self) -> None:
+        # The image ships a "*": "ask" rule, so without a permission block every
+        # command stops for a human. That is friction, not a control.
         with tempfile.TemporaryDirectory() as tmp:
             sandbox = sandbox_in(tmp, SITE)
-            self.assertFalse((sandbox.path / "agent" / "opencode.json").exists())
-            self.assertEqual(agentconfig.container_env(SITE), {})
-            self.assertNotIn("/etc/opencode", (sandbox.path / "enter.sh").read_text(encoding="utf-8"))
+            env = agentconfig.container_env(SITE)
+
+            self.assertEqual(json.loads(env["OPENCODE_PERMISSION"])["bash"], "allow")
+            self.assertEqual(json.loads(env["OPENCODE_PERMISSION"])["webfetch"], "allow")
+            self.assertEqual(env["OPENCODE_DISABLE_PROJECT_CONFIG"], "1")
+            self.assertTrue((sandbox.path / "agent" / "opencode.json").exists())
 
     def test_site_can_override_a_permission(self) -> None:
         strict = {**PRIVATE, "agent": {**PRIVATE["agent"], "permission": {"bash": "ask"}}}

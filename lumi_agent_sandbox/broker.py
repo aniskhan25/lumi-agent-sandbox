@@ -214,7 +214,15 @@ def _check_budget(sandbox: Sandbox, limits: dict[str, object], options: dict[str
     budget = float(limits["max_node_hours_per_session"])  # type: ignore[arg-type]
     total = sum(float(entry.get("node_hours", 0)) for entry in history) + node_hours(options)
     if total > budget:
-        raise PolicyError(f"session budget exceeded: {total:.2f} of {budget} node-hours")
+        agent = sum(
+            float(entry.get("node_hours", 0))
+            for entry in history
+            if entry.get("kind") == "agent_session"
+        )
+        detail = f"; {agent:.1f} of that is the agent's own allocation" if agent else ""
+        raise PolicyError(
+            f"session budget exceeded: {total:.2f} of {budget} node-hours{detail}"
+        )
 
 
 def _history(sandbox: Sandbox) -> list[dict[str, object]]:
