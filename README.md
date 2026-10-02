@@ -226,6 +226,13 @@ So the lockdown is three things together:
   directory being read at all;
 - `OPENCODE_PERMISSION`, which is applied last of everything.
 
+The generated permission block is **complete**, not just the denials. Shell, edit, read and search
+are set to `allow`, because inside the container they can only reach `/workspace`, `/input`
+(read-only), `/output`, `/jobs` and `/logs` — there is no host filesystem, no `$HOME`, no credentials
+and no scheduler. Prompting a human per command would add friction without adding a control, and
+teaches them to approve on reflex. `external_directory` stays denied, since leaving the sandbox is
+the one thing that is not the agent's to ask for. Override any of it with `agent.permission`.
+
 The last two are undocumented upstream, so `verify` tests them rather than assuming them. Verified
 against opencode v1.18.31.
 

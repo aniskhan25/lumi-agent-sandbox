@@ -544,7 +544,16 @@ class BackendTests(unittest.TestCase):
 class CapabilityTests(unittest.TestCase):
     def test_private_profile_locks_opencode_config(self) -> None:
         config = agentconfig.opencode_config(PRIVATE)
-        self.assertEqual(config["permission"], {"webfetch": "deny", "websearch": "deny"})
+        permission = config["permission"]
+        self.assertEqual(permission["webfetch"], "deny")
+        self.assertEqual(permission["websearch"], "deny")
+        # Leaving the sandbox is not the agent's to ask for.
+        self.assertEqual(permission["external_directory"], "deny")
+        # The container already bounds these, so prompting adds friction, not safety.
+        for tool in ("bash", "edit", "write", "read", "grep"):
+            self.assertEqual(permission[tool], "allow", tool)
+        # The block must be complete: a partial one leaves the rest at "ask".
+        self.assertNotIn("ask", permission.values())
         self.assertEqual(config["enabled_providers"], ["csc-internal"])
         self.assertEqual(sorted(config["mcp"]), ["lumi-docs"])
 
@@ -568,6 +577,11 @@ class CapabilityTests(unittest.TestCase):
             self.assertFalse((sandbox.path / "agent" / "opencode.json").exists())
             self.assertEqual(agentconfig.container_env(SITE), {})
             self.assertNotIn("/etc/opencode", (sandbox.path / "enter.sh").read_text(encoding="utf-8"))
+
+    def test_site_can_override_a_permission(self) -> None:
+        strict = {**PRIVATE, "agent": {**PRIVATE["agent"], "permission": {"bash": "ask"}}}
+        self.assertEqual(agentconfig.permissions(strict)["bash"], "ask")
+        self.assertEqual(agentconfig.permissions(strict)["edit"], "allow")
 
     def test_provider_without_endpoint_is_rejected(self) -> None:
         with self.assertRaisesRegex(PolicyError, "needs a base_url"):

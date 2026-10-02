@@ -24,6 +24,19 @@ from .policy import PolicyError, is_private
 MANAGED_CONFIG = "/etc/opencode/opencode.json"
 DENIED_TOOLS = ("webfetch", "websearch")
 
+# Allowed outright, because the sandbox already bounds them: inside the
+# container these tools can only reach /workspace, /input (read-only), /output,
+# /jobs and /logs. There is no host filesystem, no $HOME, no credentials and no
+# scheduler. Prompting a human per shell command would add friction without
+# adding a control, and trains them to approve on reflex.
+CONTAINED_TOOLS = (
+    "bash", "edit", "write", "read", "glob", "grep", "list", "task", "todowrite", "skill",
+)
+
+# Denied whatever else is configured: this is the one that would leave the
+# sandbox, so it is not the agent's to ask for.
+ESCAPE_TOOLS = ("external_directory",)
+
 
 def agent_policy(site: dict[str, object]) -> dict[str, object]:
     value = site.get("agent", {})
@@ -39,11 +52,25 @@ def denied_tools(site: dict[str, object]) -> list[str]:
     return [str(tool) for tool in configured]
 
 
+def permissions(site: dict[str, object]) -> dict[str, str]:
+    """The complete permission block, not a partial one.
+
+    OpenCode deep-merges permissions, so naming only the denials would leave
+    everything else at its default of asking.
+    """
+    allowed = {tool: "allow" for tool in CONTAINED_TOOLS}
+    denied = {tool: "deny" for tool in list(denied_tools(site)) + list(ESCAPE_TOOLS)}
+    override = agent_policy(site).get("permission", {})
+    if not isinstance(override, dict):
+        raise PolicyError("site 'agent.permission' must be a mapping")
+    return {**allowed, **denied, **{str(k): str(v) for k, v in override.items()}}
+
+
 def opencode_config(site: dict[str, object]) -> dict[str, object]:
     agent = agent_policy(site)
     config: dict[str, object] = {
         "$schema": "https://opencode.ai/config.json",
-        "permission": {tool: "deny" for tool in denied_tools(site)},
+        "permission": permissions(site),
         "mcp": _mcp(agent),
     }
 
@@ -80,7 +107,8 @@ def container_env(site: dict[str, object]) -> dict[str, str]:
     return {
         "OPENCODE_DISABLE_PROJECT_CONFIG": "1",
         "OPENCODE_DISABLE_MODELS_FETCH": "1",
-        "OPENCODE_PERMISSION": json.dumps({tool: "deny" for tool in denied_tools(site)}),
+        # Applied last of all, so it carries the whole block.
+        "OPENCODE_PERMISSION": json.dumps(permissions(site)),
     }
 
 
