@@ -238,8 +238,13 @@ The generated permission block is **complete**, not just the denials. Shell, edi
 are set to `allow`, because inside the container they can only reach `/workspace`, `/input`
 (read-only), `/output`, `/jobs` and `/logs` — there is no host filesystem, no `$HOME`, no credentials
 and no scheduler. Prompting a human per command would add friction without adding a control, and
-teaches them to approve on reflex. `external_directory` stays denied, since leaving the sandbox is
-the one thing that is not the agent's to ask for. Override any of it with `agent.permission`.
+teaches them to approve on reflex.
+
+That includes `external_directory`. OpenCode means by it "outside the project directory", which is
+`/workspace` — but `/jobs`, `/input`, `/output` and `/logs` are all mounted outside it by design, so
+denying it blocks the agent from the directories the sandbox exists to give it. Inside the container
+there is no outside. `doom_loop` is left at OpenCode's default of asking, since it fires only on a
+detected runaway. Override any of it with `agent.permission`.
 
 The last two are undocumented upstream, so `verify` tests them rather than assuming them. Verified
 against opencode v1.18.31.

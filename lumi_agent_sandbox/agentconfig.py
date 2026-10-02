@@ -36,11 +36,18 @@ DENIED_TOOLS = ("webfetch", "websearch")
 # adding a control, and trains them to approve on reflex.
 CONTAINED_TOOLS = (
     "bash", "edit", "write", "read", "glob", "grep", "list", "task", "todowrite", "skill",
+    "question", "lsp",
+    # "external" to OpenCode means outside the *project* directory, which is
+    # /workspace. The sandbox deliberately mounts /jobs, /input, /output and
+    # /logs outside it, so denying this blocks the agent from the very
+    # directories the sandbox exists to hand it. Inside the container there is
+    # no outside: everything reachable is already a sandbox mount.
+    "external_directory",
 )
 
-# Denied whatever else is configured: this is the one that would leave the
-# sandbox, so it is not the agent's to ask for.
-ESCAPE_TOOLS = ("external_directory",)
+# `doom_loop` is left at OpenCode's default of asking, on purpose: it fires only
+# when a runaway loop is detected, which is worth a human look.
+ESCAPE_TOOLS: tuple[str, ...] = ()
 
 
 def agent_policy(site: dict[str, object]) -> dict[str, object]:

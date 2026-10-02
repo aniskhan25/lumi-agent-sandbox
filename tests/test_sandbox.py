@@ -548,10 +548,12 @@ class CapabilityTests(unittest.TestCase):
         permission = config["permission"]
         self.assertEqual(permission["webfetch"], "deny")
         self.assertEqual(permission["websearch"], "deny")
-        # Leaving the sandbox is not the agent's to ask for.
-        self.assertEqual(permission["external_directory"], "deny")
+        # /jobs, /input, /output and /logs are all outside /workspace, which is
+        # what OpenCode calls "external". Denying it would block the agent from
+        # the directories the sandbox exists to give it.
+        self.assertEqual(permission["external_directory"], "allow")
         # The container already bounds these, so prompting adds friction, not safety.
-        for tool in ("bash", "edit", "write", "read", "grep"):
+        for tool in ("bash", "edit", "write", "read", "grep", "external_directory"):
             self.assertEqual(permission[tool], "allow", tool)
         # The block must be complete: a partial one leaves the rest at "ask".
         self.assertNotIn("ask", permission.values())
