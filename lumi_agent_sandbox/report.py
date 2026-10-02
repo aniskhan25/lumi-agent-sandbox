@@ -25,7 +25,7 @@ from .policy import (
     egress_enforcement_available,
     profile,
 )
-from .sandbox import Sandbox, agent_mount_args, sandbox_policy
+from .sandbox import Sandbox, agent_mount_args, container_environment, sandbox_policy
 from .slurm import job_wrapper, merge_options
 
 
@@ -111,7 +111,8 @@ def inspect(sandbox: Sandbox, site: dict[str, object], site_path: Path | None = 
         f"  model        {provider.get('id') or 'unrestricted'} via {provider.get('base_url') or 'image default'}",
         f"  denied tools {', '.join(agentconfig.denied_tools(site)) if private else 'none (standard profile)'}",
         f"  MCP servers  {', '.join(sorted(agentconfig.opencode_config(site)['mcp'])) or '(none)' if private else 'image default'}",  # type: ignore[arg-type]
-        f"  project config and plugins     {'disabled' if private else 'enabled'}",
+        f"  project config and plugins     "
+        f"{'disabled' if agentconfig.container_env(site).get('OPENCODE_DISABLE_PROJECT_CONFIG') else 'enabled'}",
         "",
         "Not enforced",
     ]
@@ -285,7 +286,7 @@ def _container_checks(sandbox: Sandbox, site: dict[str, object]) -> list[dict[st
 def _probe_env(site: dict[str, object]) -> dict[str, str]:
     """The same SINGULARITYENV_* variables `enter` sets, so the probe sees the real session."""
     environment = dict(os.environ)
-    environment.update({f"SINGULARITYENV_{k}": v for k, v in agentconfig.container_env(site).items()})
+    environment.update({f"SINGULARITYENV_{k}": v for k, v in container_environment(site).items()})
     return environment
 
 

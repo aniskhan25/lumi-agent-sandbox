@@ -20,6 +20,7 @@ from lumi_agent_sandbox.policy import (
 )
 from lumi_agent_sandbox.sandbox import (
     agent_mount_args,
+    container_environment,
     create_sandbox,
     create_sandbox,
     destroy_sandbox,
@@ -572,6 +573,17 @@ class CapabilityTests(unittest.TestCase):
             self.assertIn("SINGULARITYENV_OPENCODE_DISABLE_PROJECT_CONFIG=1", enter)
             self.assertIn("SINGULARITYENV_OPENCODE_CONFIG_CONTENT=", enter)
             self.assertNotIn("/etc/opencode", enter)
+
+    def test_verify_probes_the_same_environment_enter_creates(self) -> None:
+        # Probing without PREPEND_PATH leaves /safe-bin off the PATH, which
+        # reports lumi-job as missing when it is mounted and working.
+        environment = container_environment(SITE)
+        self.assertEqual(environment["PREPEND_PATH"], "/safe-bin")
+        self.assertIn("OPENCODE_PERMISSION", environment)
+        self.assertEqual(
+            set(report._probe_env(SITE)) - set(os.environ),
+            {f"SINGULARITYENV_{k}" for k in environment},
+        )
 
     def test_standard_profile_still_silences_the_prompts(self) -> None:
         # The image ships a "*": "ask" rule, so without a permission block every

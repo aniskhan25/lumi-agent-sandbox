@@ -103,6 +103,7 @@ stays at `job_execution: host` and only the submit path works.
 | `CERTIFICATE_VERIFY_FAILED` | Python without a CA bundle. `pip install --user certifi`, `export SSL_CERT_FILE=$(python3 -m certifi)`. |
 | `FIRECREST_TOKEN may have expired` | 24h personal token. Get a new one. |
 | Agent hunts for numpy | Pre-`3d6db7b` sample. `git pull`; it is stdlib-only now. |
+| `verify` reports `lumi_job absent` | Pre-`8f2` bug: the probe ran without `/safe-bin` on PATH. `git pull`. |
 
 ## Reading a session afterwards
 

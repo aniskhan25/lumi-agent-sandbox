@@ -119,6 +119,18 @@ def mount_args(sandbox: Sandbox) -> list[str]:
     ]
 
 
+def container_environment(site: dict[str, object]) -> dict[str, str]:
+    """Variables the agent container runs with, unprefixed.
+
+    One definition because `verify` has to probe the same environment `enter`
+    creates: probing without PREPEND_PATH put /safe-bin off the PATH and
+    reported lumi-job as missing when it was mounted and working.
+    """
+    environment = {"PREPEND_PATH": "/safe-bin"}
+    environment.update(agentconfig.container_env(site))
+    return environment
+
+
 def agent_mount_args(sandbox: Sandbox) -> list[str]:
     """The agent also gets jobs/, the request channel, and the /safe-bin wrappers.
 
@@ -222,9 +234,10 @@ def _write_policy(sandbox: Sandbox, site: dict[str, object]) -> None:
 def write_enter_script(sandbox: Sandbox, site: dict[str, object] | None = None) -> Path:
     site = site or {}
     mounts = _shell_args(agent_mount_args(sandbox) + agentconfig.config_mount(sandbox.path, site))
-    environment = {"SINGULARITYENV_PREPEND_PATH": "/safe-bin"}
-    environment.update({f"SINGULARITYENV_{k}": v for k, v in agentconfig.container_env(site).items()})
-    exports = " \\\n  ".join(f"{key}={shlex.quote(value)}" for key, value in environment.items())
+    exports = " \\\n  ".join(
+        f"SINGULARITYENV_{key}={shlex.quote(value)}"
+        for key, value in container_environment(site).items()
+    )
     runtime = container_command(site)
     launcher = _allocation_prefix(sandbox, site)
     script = f"""#!/bin/sh
