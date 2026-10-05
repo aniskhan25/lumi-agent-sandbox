@@ -677,10 +677,15 @@ class CapabilityTests(unittest.TestCase):
             sandbox = sandbox_in(tmp, PRIVATE)
             audit.write_manifest(sandbox, PRIVATE)
 
+            (sandbox.path / "logs" / "job-1.out").write_text("ALL TILES HEALTHY\n", encoding="utf-8")
+
             kept = destroy_sandbox(sandbox, yes=True)
 
             self.assertFalse(sandbox.path.exists())
             self.assertTrue((kept / "manifest.json").is_file())
+            # What the job printed is the part you want when asking later
+            # whether the work was actually done.
+            self.assertEqual((kept / "logs" / "job-1.out").read_text(encoding="utf-8"), "ALL TILES HEALTHY\n")
 
 
 if __name__ == "__main__":

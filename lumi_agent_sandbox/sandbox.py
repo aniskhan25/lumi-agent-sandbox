@@ -203,6 +203,10 @@ def archive_audit(sandbox: Sandbox) -> Path | None:
 
     An audit record that is deleted along with the thing it describes is not an
     audit record, so the manifest, job log and verification results outlive it.
+
+    Job logs go too. The manifest says what was enforced and jobs.jsonl says what
+    was submitted, but neither says what the job actually printed -- and that is
+    the part you want when asking afterwards whether the work was really done.
     """
     audit = sandbox.path / "audit"
     if not audit.is_dir() or not any(audit.iterdir()):
@@ -211,6 +215,10 @@ def archive_audit(sandbox: Sandbox) -> Path | None:
     destination = sandbox.root / ".audit" / f"{sandbox.task}-{stamp}"
     destination.parent.mkdir(parents=True, exist_ok=True)
     shutil.copytree(audit, destination)
+
+    logs = sandbox.path / "logs"
+    if logs.is_dir() and any(logs.iterdir()):
+        shutil.copytree(logs, destination / "logs")
     return destination
 
 

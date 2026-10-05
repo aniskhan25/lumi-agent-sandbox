@@ -356,8 +356,10 @@ no source code — it records the boundary, not the work.
 lumi-agent-sandbox destroy smoke-test --yes
 ```
 
-The audit trail is copied to `<root>/.audit/<task>-<timestamp>/` first. An audit record deleted with
-the thing it describes is not an audit record.
+The audit trail and the job logs are copied to `<root>/.audit/<task>-<timestamp>/` first. An audit
+record deleted with the thing it describes is not an audit record — and the manifest alone tells you
+what was *enforced*, not what the job *printed*, which is what you want when asking later whether
+the work was really done.
 
 ## Development
 
